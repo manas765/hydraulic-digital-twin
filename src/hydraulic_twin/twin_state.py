@@ -101,6 +101,7 @@ class DigitalTwin:
             "simulated_opening_percent": [],
             "simulated_flow_lpm": [],
             "simulated_pressure_bar": [],
+            "simulated_relief_flow_lpm": [],
         }
         for step_number in range(steps):
             decision = control_decision(
@@ -124,6 +125,9 @@ class DigitalTwin:
             )
             trace["simulated_flow_lpm"].append(valve_flow)
             trace["simulated_pressure_bar"].append(self.plant.pressure_bar)
+            trace["simulated_relief_flow_lpm"].append(
+                self.plant.relief_flow_lpm
+            )
         self.last_trace = trace
         self.simulation_time_s += steps * self.dt_seconds
 

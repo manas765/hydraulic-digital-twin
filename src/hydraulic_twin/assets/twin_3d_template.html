@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hydraulic digital twin - 3D schematic view</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0f1720;
+    color: #e6edf3;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  #view { position: fixed; top: 0; right: 0; bottom: 0; left: 0; }
+  #view canvas { display: block; touch-action: none; }
+  .panel { position: fixed; background: rgba(15, 23, 32, 0.84);
+    border: 1px solid #2b3a4a; border-radius: 8px; padding: 10px 12px;
+    font-size: 12.5px; line-height: 1.45; }
+  #hud { top: 10px; left: 10px; width: 330px; max-height: calc(100% - 96px);
+    overflow-y: auto; }
+  #legend { top: 10px; right: 10px; width: 255px; }
+  #controls { left: 10px; right: 10px; bottom: 10px; display: flex;
+    gap: 10px; align-items: center; }
+  #slider { flex: 1; }
+  .title { font-weight: 700; font-size: 14px; }
+  .note { color: #9fb3c8; margin: 4px 0 6px; }
+  .sect { margin-top: 8px; padding-top: 4px; border-top: 1px solid #2b3a4a;
+    font-weight: 700; font-size: 11.5px; letter-spacing: 0.04em; }
+  .tag-data { color: #7ee787; }
+  .tag-ml { color: #ffa657; }
+  .tag-sim { color: #58a6ff; }
+  .tag-user { color: #d2a8ff; }
+  .row { display: flex; justify-content: space-between; gap: 8px; }
+  .row b { text-align: right; }
+  .lvl-CRITICAL { color: #ff7b72; }
+  .lvl-WARNING { color: #e3b341; }
+  .lvl-INFO { color: #79c0ff; }
+  .alert { margin: 3px 0; }
+  .swatch { display: inline-block; width: 11px; height: 11px;
+    border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  .fine { color: #9fb3c8; font-size: 11px; margin-top: 6px; }
+  button, select { background: #21303f; color: #e6edf3; border: 1px solid #3b4d61;
+    border-radius: 6px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; }
+  #fallback { display: none; position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); max-width: 420px; text-align: center;
+    background: #3b1f1f; border: 1px solid #8b3a3a; border-radius: 8px;
+    padding: 14px; }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="fallback"></div>
+
+<div id="hud" class="panel">
+  <div class="title">Hydraulic rig - schematic 3D view</div>
+  <div class="note">DATASET REPLAY of a historical cycle. Not live data.
+    Commands no real equipment.</div>
+
+  <div class="row"><span>Dataset cycle</span><b id="hud-cycle"></b></div>
+
+  <div class="sect tag-ml">ML PREDICTION</div>
+  <div class="row"><span>Valve condition</span><b id="hud-pred"></b></div>
+  <div class="row"><span>Dataset label (offline check)</span>
+    <b id="hud-label"></b></div>
+
+  <div class="sect tag-user">USER-SELECTED DEMAND</div>
+  <div class="row"><span>Desired flow</span><b id="hud-demand"></b></div>
+
+  <div class="sect tag-sim">SIMULATED VALUES</div>
+  <div class="row"><span>Control mode</span><b id="hud-mode"></b></div>
+  <div class="row"><span>Requested opening</span><b id="hud-req"></b></div>
+  <div class="row"><span>Valve opening</span><b id="hud-open"></b></div>
+  <div class="row"><span>Valve flow</span><b id="hud-flow"></b></div>
+  <div class="row"><span>Pressure</span><b id="hud-pressure"></b></div>
+  <div class="row"><span>Relief-valve flow</span><b id="hud-relief"></b></div>
+  <div class="fine" id="hud-reason"></div>
+
+  <div class="sect tag-data">DATASET MEASUREMENT (cycle mean)</div>
+  <div id="observed"></div>
+
+  <div class="sect">Alerts</div>
+  <div id="alerts"></div>
+</div>
+
+<div id="legend" class="panel">
+  <div class="title">Legend</div>
+  <div><span class="swatch" style="background:#2ecc71"></span>valve band 100%</div>
+  <div><span class="swatch" style="background:#f1c40f"></span>valve band 90%</div>
+  <div><span class="swatch" style="background:#e67e22"></span>valve band 80%</div>
+  <div><span class="swatch" style="background:#e74c3c"></span>valve band 73%</div>
+  <div><span class="swatch" style="background:#7f8c8d"></span>no prediction</div>
+  <div class="fine">Band colour = ML PREDICTION of valve condition.</div>
+  <div style="margin-top:6px"><span class="swatch" style="width:40px;
+    background:linear-gradient(90deg,#338cff,#f2cc33,#f23326)"></span>0 to
+    supply cap</div>
+  <div class="fine">Upstream pipe colour = SIMULATED pressure.</div>
+  <div style="margin-top:6px"><span class="swatch" style="background:#22d3ee"></span>
+    spool = SIMULATED opening</div>
+  <div><span class="swatch" style="background:#ff9f1c"></span>ring = requested
+    opening (controller)</div>
+  <div><span class="swatch" style="background:#5ec8ff"></span>particles = SIMULATED
+    valve flow</div>
+  <div><span class="swatch" style="background:#ff9f1c"></span>orange particles =
+    SIMULATED relief flow</div>
+  <div class="fine">Generic schematic, not the UCI rig geometry. The actuator
+    is static: it is not simulated. Drag to rotate, wheel to zoom.</div>
+</div>
+
+<div id="controls" class="panel">
+  <button id="btn-play">Pause</button>
+  <button id="btn-restart">Restart</button>
+  <button id="btn-end">Jump to end</button>
+  <input id="slider" type="range" min="0" value="0" step="1">
+  <span id="hud-time"></span>
+  <select id="speed">
+    <option value="1">1x</option>
+    <option value="2">2x</option>
+    <option value="4" selected>4x</option>
+    <option value="8">8x</option>
+  </select>
+</div>
+
+<script src="__THREE_URL__"></script>
+<script>
+(function () {
+  "use strict";
+
+  var D = __SCENE_DATA__;
+  var T = D.trace;
+  var N = T.time_s.length;
+  var DT_TRACE = N > 1 ? T.time_s[1] - T.time_s[0] : 0.1;
+  var DURATION = T.time_s[N - 1];
+  var PARTICLE_UNITS_PER_LPM = 0.3;
+
+  function $(id) { return document.getElementById(id); }
+
+  // ------------------------------------------------------------ static HUD
+  function addRow(parent, name, value) {
+    var row = document.createElement("div");
+    row.className = "row";
+    var left = document.createElement("span");
+    left.textContent = name;
+    var right = document.createElement("b");
+    right.textContent = value;
+    row.appendChild(left);
+    row.appendChild(right);
+    parent.appendChild(row);
+  }
+
+  $("hud-cycle").textContent = String(D.cycle_id);
+  $("hud-label").textContent = D.dataset_valve_label + "%";
+  $("hud-demand").textContent = D.desired_flow_lpm.toFixed(1) + " L/min";
+  $("hud-mode").textContent = D.control_mode;
+  $("hud-reason").textContent = D.control_reason;
+
+  if (D.predicted_condition === null) {
+    $("hud-pred").textContent = "none (sensor data invalid)";
+  } else {
+    var predText = D.predicted_condition + "% - " + D.predicted_description;
+    if (D.confidence !== null) {
+      predText += " (" + Math.round(D.confidence * 100) + "%)";
+    }
+    $("hud-pred").textContent = predText;
+  }
+
+  Object.keys(D.observed).forEach(function (name) {
+    var item = D.observed[name];
+    addRow($("observed"), name, item.value + " " + item.unit);
+  });
+
+  if (D.alerts.length === 0) {
+    addRow($("alerts"), "none", "");
+  }
+  D.alerts.forEach(function (alert) {
+    var div = document.createElement("div");
+    div.className = "alert lvl-" + alert.level;
+    div.textContent = alert.level + " | " + alert.source + " | " +
+      alert.message;
+    $("alerts").appendChild(div);
+  });
+
+  $("slider").max = String(N - 1);
+
+  function showFallback(message) {
+    var box = $("fallback");
+    box.textContent = message;
+    box.style.display = "block";
+  }
+
+  // ---------------------------------------------------------------- scene
+  function createScene() {
+    var container = $("view");
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    container.appendChild(renderer.domElement);
+
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0f1720);
+    var camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 0.9));
+    var sun = new THREE.DirectionalLight(0xffffff, 0.8);
+    sun.position.set(6, 12, 8);
+    scene.add(sun);
+    scene.add(new THREE.GridHelper(40, 40, 0x2b3a4a, 0x1d2935));
+
+    // ---- helpers
+    function material(color, opts) {
+      var o = { color: color, roughness: 0.55, metalness: 0.35 };
+      if (opts) { for (var k in opts) { o[k] = opts[k]; } }
+      return new THREE.MeshStandardMaterial(o);
+    }
+    function addMesh(geometry, mat, x, y, z) {
+      var mesh = new THREE.Mesh(geometry, mat);
+      mesh.position.set(x, y, z);
+      scene.add(mesh);
+      return mesh;
+    }
+    function box(w, h, d, mat, x, y, z) {
+      return addMesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z);
+    }
+    function cylinder(r, h, mat, x, y, z, lieAlongX) {
+      var mesh = addMesh(new THREE.CylinderGeometry(r, r, h, 24), mat, x, y, z);
+      if (lieAlongX) { mesh.rotation.z = Math.PI / 2; }
+      return mesh;
+    }
+    function pipe(a, b, r, mat) {
+      var va = new THREE.Vector3(a[0], a[1], a[2]);
+      var vb = new THREE.Vector3(b[0], b[1], b[2]);
+      var dir = new THREE.Vector3().subVectors(vb, va);
+      var len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      var mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 16), mat);
+      mesh.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+      mesh.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0), dir.normalize());
+      scene.add(mesh);
+      return mesh;
+    }
+    function joint(p, r, mat) {
+      return addMesh(new THREE.SphereGeometry(r, 14, 10), mat, p[0], p[1], p[2]);
+    }
+    function label(text, x, y, z, scale) {
+      var canvas = document.createElement("canvas");
+      canvas.width = 512;
+      canvas.height = 128;
+      var g = canvas.getContext("2d");
+      g.fillStyle = "rgba(15,23,32,0.8)";
+      g.fillRect(0, 0, 512, 128);
+      g.fillStyle = "#e6edf3";
+      g.font = "bold 42px sans-serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(text, 256, 64);
+      var tex = new THREE.CanvasTexture(canvas);
+      var sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: tex, transparent: true }));
+      sprite.position.set(x, y, z);
+      sprite.scale.set(scale * 4, scale, 1);
+      scene.add(sprite);
+      return sprite;
+    }
+
+    // ---- materials
+    var steel = material(0x8a98a8);
+    var darkSteel = material(0x4a5666);
+    var lowMat = material(0x4b6a8a);
+    var pressureMat = material(0x3388ff, { emissive: 0x112244 });
+    var bandMat = material(0x7f8c8d, { emissive: 0x111111 });
+    var reliefMat = material(0x9a2f2f, { emissive: 0x000000 });
+    var spoolMat = material(0x22d3ee, { emissive: 0x0b6f80 });
+    var ghostMat = new THREE.MeshBasicMaterial({ color: 0xff9f1c });
+
+    // ---- tank, pump, motor
+    box(3, 1.6, 2.2, material(0x6b7f95, { transparent: true, opacity: 0.35 }),
+        -7, 0.8, 0);
+    box(2.7, 0.9, 1.9, material(0xb7791f, { roughness: 0.9 }), -7, 0.5, 0);
+    label("Tank", -7, 2.3, 0, 0.55);
+
+    box(1, 1, 1, steel, -4, 1.2, 0);
+    cylinder(0.5, 1.2, darkSteel, -4, 2.3, 0, false);
+    label("Pump + motor", -4, 3.6, 0, 0.55);
+    pipe([-5.5, 0.5, 0], [-4, 0.5, 0], 0.12, lowMat);
+    pipe([-4, 0.5, 0], [-4, 0.75, 0], 0.12, lowMat);
+
+    // ---- pressure line (colour follows SIMULATED pressure)
+    pipe([-3.5, 1.2, 0], [0, 1.2, 0], 0.16, pressureMat);
+    pipe([0, 1.2, 0], [2.4, 1.2, 0], 0.16, pressureMat);
+    joint([0, 1.2, 0], 0.2, pressureMat);
+
+    // ---- accumulator
+    pipe([0, 1.2, 0], [0, 1.6, 0], 0.12, pressureMat);
+    cylinder(0.42, 1.4, steel, 0, 2.3, 0, false);
+    addMesh(new THREE.SphereGeometry(0.42, 18, 12), steel, 0, 3.0, 0);
+    label("Accumulator", 0, 4.0, 0, 0.5);
+
+    // ---- relief branch
+    pipe([0, 1.2, 0], [0, 1.2, -0.8], 0.12, pressureMat);
+    box(0.7, 0.7, 0.7, reliefMat, 0, 1.2, -1.2);
+    pipe([0, 1.2, -1.55], [0, 1.2, -2], 0.12, lowMat);
+    pipe([0, 1.2, -2], [0, 0.5, -2], 0.12, lowMat);
+    label("Relief valve", 0, 2.1, -1.2, 0.45);
+
+    // ---- proportional valve with spool
+    box(1.8, 1.1, 1.1, steel, 3.3, 1.2, 0);
+    var band = box(0.4, 1.22, 1.22, bandMat, 3.3, 1.2, 0);
+    var spool = new THREE.Group();
+    var rod = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 16),
+                             spoolMat);
+    var cap = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), spoolMat);
+    cap.position.set(0, 0.7, 0);
+    spool.add(rod);
+    spool.add(cap);
+    scene.add(spool);
+    var SPOOL_BASE = 1.55;
+    var SPOOL_TRAVEL = 0.9;
+    spool.position.set(3.3, SPOOL_BASE, 0);
+    var ghost = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.035, 8, 28),
+                               ghostMat);
+    ghost.rotation.x = Math.PI / 2;
+    scene.add(ghost);
+    box(0.04, SPOOL_TRAVEL, 0.04, darkSteel, 3.75, SPOOL_BASE + 0.7 +
+        SPOOL_TRAVEL / 2, 0);
+    label("Proportional valve", 3.3, 4.2, 0, 0.5);
+
+    // ---- actuator (static: not simulated)
+    pipe([4.2, 1.2, 0], [6.1, 1.2, 0], 0.14, lowMat);
+    cylinder(0.5, 2.6, darkSteel, 7.4, 1.2, 0, true);
+    cylinder(0.16, 1.7, steel, 9.55, 1.2, 0, true);
+    box(0.25, 0.6, 0.6, steel, 10.5, 1.2, 0);
+    label("Actuator (not simulated)", 8.2, 2.4, 0, 0.5);
+
+    // ---- return line
+    pipe([8.4, 0.75, 0], [8.4, 0.5, 0], 0.12, lowMat);
+    pipe([8.4, 0.5, 0], [8.4, 0.5, -2], 0.12, lowMat);
+    pipe([8.4, 0.5, -2], [-7, 0.5, -2], 0.12, lowMat);
+    pipe([-7, 0.5, -2], [-7, 0.5, -1.0], 0.12, lowMat);
+    [[8.4, 0.5, 0], [8.4, 0.5, -2], [-7, 0.5, -2]].forEach(function (p) {
+      joint(p, 0.15, lowMat);
+    });
+
+    // ---- flow particles
+    function makePath(points) {
+      var lens = [];
+      var total = 0;
+      for (var i = 1; i < points.length; i++) {
+        var a = points[i - 1];
+        var b = points[i];
+        var l = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+        lens.push(l);
+        total += l;
+      }
+      return { points: points, lens: lens, total: total };
+    }
+    function pointAt(path, u) {
+      var d = ((u % path.total) + path.total) % path.total;
+      for (var i = 0; i < path.lens.length; i++) {
+        if (d <= path.lens[i]) {
+          var a = path.points[i];
+          var b = path.points[i + 1];
+          var t = path.lens[i] > 0 ? d / path.lens[i] : 0;
+          return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t,
+                  a[2] + (b[2] - a[2]) * t];
+        }
+        d -= path.lens[i];
+      }
+      return path.points[path.points.length - 1];
+    }
+    var particleGeometry = new THREE.SphereGeometry(0.09, 10, 8);
+    function makeGroup(points, color, spacing) {
+      var path = makePath(points);
+      var count = Math.max(3, Math.round(path.total / spacing));
+      var mat = new THREE.MeshBasicMaterial({ color: color });
+      var meshes = [];
+      var offsets = [];
+      for (var i = 0; i < count; i++) {
+        var mesh = new THREE.Mesh(particleGeometry, mat);
+        scene.add(mesh);
+        meshes.push(mesh);
+        offsets.push(i * path.total / count);
+      }
+      return { path: path, meshes: meshes, offsets: offsets, speed: 0 };
+    }
+    function advanceGroup(group, dt) {
+      for (var i = 0; i < group.meshes.length; i++) {
+        group.offsets[i] += group.speed * dt;
+        var p = pointAt(group.path, group.offsets[i]);
+        group.meshes[i].position.set(p[0], p[1], p[2]);
+        group.meshes[i].visible = group.speed > 0.02;
+      }
+    }
+
+    var upstream = makeGroup([[-3.5, 1.2, 0], [0, 1.2, 0]], 0x5ec8ff, 0.7);
+    var mainLine = makeGroup(
+      [[0, 1.2, 0], [6.1, 1.2, 0], [8.4, 1.2, 0], [8.4, 0.5, 0],
+       [8.4, 0.5, -2], [-7, 0.5, -2], [-7, 0.5, -1.0]], 0x5ec8ff, 0.9);
+    var reliefLine = makeGroup(
+      [[0, 1.2, 0], [0, 1.2, -2], [0, 0.5, -2]], 0xff9f1c, 0.5);
+    var groups = [upstream, mainLine, reliefLine];
+
+    // ---- colours
+    var BAND_COLORS = { 100: 0x2ecc71, 90: 0xf1c40f, 80: 0xe67e22, 73: 0xe74c3c };
+    bandMat.color.setHex(
+      D.predicted_condition === null ? 0x7f8c8d
+        : (BAND_COLORS[D.predicted_condition] || 0x7f8c8d));
+
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function pressureRGB(p) {
+      var t = Math.max(0, Math.min(1, p / D.limits.supply_pressure_bar));
+      var stops = [[0.20, 0.55, 1.00], [0.95, 0.80, 0.20], [0.95, 0.20, 0.15]];
+      var s = t < 0.5 ? 0 : 1;
+      var u = t < 0.5 ? t * 2 : (t - 0.5) * 2;
+      var a = stops[s];
+      var b = stops[s + 1];
+      return [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2], b[2], u)];
+    }
+
+    // ---- camera (simple orbit controls, no extra libraries)
+    var theta = 0.75;
+    var phi = 1.1;
+    var radius = 24;
+    var target = { x: 1.8, y: 1.6, z: -0.6 };
+    function updateCamera() {
+      camera.position.set(
+        target.x + radius * Math.sin(phi) * Math.sin(theta),
+        target.y + radius * Math.cos(phi),
+        target.z + radius * Math.sin(phi) * Math.cos(theta));
+      camera.lookAt(new THREE.Vector3(target.x, target.y, target.z));
+    }
+    var dragging = false;
+    var lastX = 0;
+    var lastY = 0;
+    var canvas = renderer.domElement;
+    canvas.addEventListener("pointerdown", function (e) {
+      dragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+    });
+    window.addEventListener("pointerup", function () { dragging = false; });
+    window.addEventListener("pointermove", function (e) {
+      if (!dragging) { return; }
+      theta -= (e.clientX - lastX) * 0.005;
+      phi = Math.max(0.15, Math.min(1.5, phi - (e.clientY - lastY) * 0.005));
+      lastX = e.clientX;
+      lastY = e.clientY;
+      updateCamera();
+    });
+    canvas.addEventListener("wheel", function (e) {
+      e.preventDefault();
+      radius = Math.max(6, Math.min(45, radius * (e.deltaY > 0 ? 1.1 : 0.9)));
+      updateCamera();
+    }, { passive: false });
+
+    function resize() {
+      var w = container.clientWidth || window.innerWidth;
+      var h = container.clientHeight || window.innerHeight;
+      renderer.setSize(w, h);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener("resize", resize);
+    resize();
+    updateCamera();
+
+    return {
+      update: function (i) {
+        var open = T.simulated_opening_percent[i];
+        var req = T.requested_opening_percent[i];
+        var flow = T.simulated_flow_lpm[i];
+        var relief = T.simulated_relief_flow_lpm[i];
+        var rgb = pressureRGB(T.simulated_pressure_bar[i]);
+
+        spool.position.y = SPOOL_BASE + SPOOL_TRAVEL * open / 100;
+        ghost.position.set(3.3, SPOOL_BASE + SPOOL_TRAVEL * req / 100 + 0.7, 0);
+        pressureMat.color.setRGB(rgb[0], rgb[1], rgb[2]);
+        pressureMat.emissive.setRGB(rgb[0] * 0.25, rgb[1] * 0.25, rgb[2] * 0.25);
+        reliefMat.emissive.setHex(relief > 0.05 ? 0x992200 : 0x000000);
+
+        upstream.speed = (flow + relief) * PARTICLE_UNITS_PER_LPM;
+        mainLine.speed = flow * PARTICLE_UNITS_PER_LPM;
+        reliefLine.speed = relief * PARTICLE_UNITS_PER_LPM;
+        groups.forEach(function (g) { advanceGroup(g, 0); });
+      },
+      step: function (dt) {
+        groups.forEach(function (g) { advanceGroup(g, dt); });
+      },
+      render: function () { renderer.render(scene, camera); }
+    };
+  }
+
+  var scene3d = null;
+  if (typeof THREE === "undefined") {
+    showFallback("three.js could not be loaded (an internet connection is " +
+      "needed for the 3D view). The values panel still works.");
+  } else {
+    try {
+      scene3d = createScene();
+    } catch (err) {
+      scene3d = null;
+      showFallback("The 3D scene could not start (WebGL may be unavailable): " +
+        err.message + ". The values panel still works.");
+    }
+  }
+
+  // ------------------------------------------------------------- playback
+  var playing = true;
+  var tSim = 0;
+  var speedMul = 4;
+  var lastMs = 0;
+
+  function setFrame(i) {
+    i = Math.max(0, Math.min(N - 1, i));
+    $("hud-req").textContent = T.requested_opening_percent[i].toFixed(1) + "%";
+    $("hud-open").textContent = T.simulated_opening_percent[i].toFixed(1) + "%";
+    $("hud-flow").textContent = T.simulated_flow_lpm[i].toFixed(2) + " L/min";
+    $("hud-pressure").textContent = T.simulated_pressure_bar[i].toFixed(1) + " bar";
+    $("hud-relief").textContent = T.simulated_relief_flow_lpm[i].toFixed(2) + " L/min";
+    $("hud-time").textContent = T.time_s[i].toFixed(1) + " / " +
+      DURATION.toFixed(0) + " s (simulated)";
+    $("slider").value = String(i);
+    if (scene3d) { scene3d.update(i); }
+  }
+
+  function tick(nowMs) {
+    var dt = lastMs ? Math.min(0.1, (nowMs - lastMs) / 1000) : 0;
+    lastMs = nowMs;
+    if (playing) {
+      tSim += dt * speedMul;
+      if (tSim > DURATION) { tSim = 0; }
+      setFrame(Math.min(N - 1, Math.floor(tSim / DT_TRACE)));
+    }
+    if (scene3d) {
+      if (playing) { scene3d.step(dt); }
+      scene3d.render();
+    }
+    requestAnimationFrame(tick);
+  }
+
+  $("btn-play").addEventListener("click", function () {
+    playing = !playing;
+    $("btn-play").textContent = playing ? "Pause" : "Play";
+  });
+  $("btn-restart").addEventListener("click", function () {
+    tSim = 0;
+    playing = true;
+    $("btn-play").textContent = "Pause";
+    setFrame(0);
+  });
+  $("btn-end").addEventListener("click", function () {
+    playing = false;
+    $("btn-play").textContent = "Play";
+    tSim = DURATION;
+    setFrame(N - 1);
+  });
+  $("slider").addEventListener("input", function () {
+    playing = false;
+    $("btn-play").textContent = "Play";
+    var i = parseInt($("slider").value, 10);
+    tSim = T.time_s[i];
+    setFrame(i);
+  });
+  $("speed").addEventListener("change", function () {
+    speedMul = parseFloat($("speed").value);
+  });
+
+  setFrame(0);
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

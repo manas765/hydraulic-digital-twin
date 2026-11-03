@@ -33,6 +33,10 @@ from src.hydraulic_twin.dashboard_data import (  # noqa: E402
     sensor_table,
     trace_frame,
 )
+from src.hydraulic_twin.three_view import (  # noqa: E402
+    build_scene_data,
+    render_html,
+)
 from src.hydraulic_twin.twin_state import DigitalTwin  # noqa: E402
 
 st.set_page_config(page_title="Hydraulic Digital Twin", layout="wide")
@@ -163,9 +167,9 @@ for alert in state["alerts"]:
     show_alert(alert)
 
 (tab_overview, tab_sensors, tab_health, tab_twin, tab_faults,
- tab_experiments) = st.tabs([
+ tab_experiments, tab_3d) = st.tabs([
     "Overview", "Sensors", "Valve health", "Twin and control",
-    "Faults", "Experiments",
+    "Faults", "Experiments", "3D view",
 ])
 
 # ---------------------------------------------------------------- overview
@@ -389,3 +393,22 @@ with tab_experiments:
             "valve class 100, which makes the all-cycles test set easier "
             "and lets a model use a warm-up shortcut."
         )
+        # ----------------------------------------------------------------- 3D view
+def show_html(html, height):
+    if hasattr(st, "iframe"):
+        st.iframe(html, height=height)
+    else:  # older Streamlit versions
+        import streamlit.components.v1 as components
+        components.html(html, height=height)
+
+
+with tab_3d:
+    st.subheader("3D schematic view")
+    st.caption(
+        "Only the SIMULATED valve opening, flow and pressure move. The "
+        "ML PREDICTION colours the valve band, and DATASET MEASUREMENT "
+        "values are shown as text. The actuator is not simulated. The page "
+        "loads three.js from the internet."
+    )
+    scene_data = build_scene_data(state, trace, twin.plant)
+    show_html(render_html(scene_data), 700)
