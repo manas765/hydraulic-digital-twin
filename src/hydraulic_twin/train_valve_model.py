@@ -15,7 +15,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 
-from .config import MODEL_DIR, PROCESSED_DATA_DIR
+from .config import MODEL_DIR, PROCESSED_DATA_DIR, REPORT_DIR
 
 VALVE_LABELS = [73, 80, 90, 100]
 MODEL_PATH = MODEL_DIR / "valve_health_pipeline.joblib"
@@ -33,6 +33,50 @@ def make_model() -> Pipeline:
             n_jobs=-1,
         )),
     ])
+
+
+def save_cv_results(
+    run_name, cycle_ids, y, oof_pred,
+    fold_macro_f1, fold_bal_acc, block_size, n_splits,
+):
+    """Save metrics, confusion matrix and out-of-fold predictions so the
+    dashboard can show them without retraining."""
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+    results = {
+        "run": run_name,
+        "n_cycles": int(len(y)),
+        "block_size": int(block_size),
+        "n_splits": int(n_splits),
+        "labels": VALVE_LABELS,
+        "macro_f1_mean": float(np.mean(fold_macro_f1)),
+        "macro_f1_std": float(np.std(fold_macro_f1)),
+        "balanced_accuracy_mean": float(np.mean(fold_bal_acc)),
+        "balanced_accuracy_std": float(np.std(fold_bal_acc)),
+        "fold_macro_f1": [float(v) for v in fold_macro_f1],
+        "fold_balanced_accuracy": [float(v) for v in fold_bal_acc],
+        "confusion_matrix": confusion_matrix(
+            y, oof_pred, labels=VALVE_LABELS
+        ).tolist(),
+        "classification_report": classification_report(
+            y, oof_pred, labels=VALVE_LABELS,
+            zero_division=0, output_dict=True,
+        ),
+    }
+    with open(REPORT_DIR / f"valve_cv_{run_name}.json", "w",
+              encoding="utf-8") as f:
+        json.dump(
+            results, f, indent=2,
+            default=lambda o: o.item() if hasattr(o, "item") else str(o),
+        )
+
+    pd.DataFrame({
+        "cycle_id": cycle_ids,
+        "true_valve_condition": y.to_numpy(),
+        "oof_predicted_valve_condition": oof_pred,
+    }).to_csv(
+        REPORT_DIR / f"valve_oof_predictions_{run_name}.csv", index=False
+    )
 
 
 def main(include_unstable: bool, block_size: int, n_splits: int):
@@ -110,6 +154,14 @@ def main(include_unstable: bool, block_size: int, n_splits: int):
     print("Confusion matrix (rows = true, columns = predicted; "
           "order 73, 80, 90, 100):")
     print(confusion_matrix(y, oof_pred, labels=VALVE_LABELS))
+
+    run_name = "all_cycles" if include_unstable else "stable_only"
+    save_cv_results(
+        run_name, cycle_ids, y, oof_pred,
+        fold_macro_f1, fold_bal_acc, block_size, n_splits,
+    )
+    print(f"\nSaved CV results: reports/valve_cv_{run_name}.json "
+          f"and valve_oof_predictions_{run_name}.csv")
 
     if include_unstable:
         print("\nExperiment run: model NOT saved.")

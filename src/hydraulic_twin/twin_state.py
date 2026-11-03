@@ -72,6 +72,7 @@ class DigitalTwin:
         self.valve = ProportionalValve()
         self.plant = HydraulicPlant()
         self.simulation_time_s = 0.0
+        self.last_trace = None  # time series of the last simulated cycle
 
     def advance_to_cycle(
         self, cycle_id: int, simulate_sensor_fault: bool = False
@@ -94,7 +95,14 @@ class DigitalTwin:
         # Advance the simulation (valve and plant state persist across cycles)
         steps = int(round(self.sim_seconds_per_cycle / self.dt_seconds))
         decision, valve_flow = None, 0.0
-        for _ in range(steps):
+        trace = {
+            "time_s": [],
+            "requested_opening_percent": [],
+            "simulated_opening_percent": [],
+            "simulated_flow_lpm": [],
+            "simulated_pressure_bar": [],
+        }
+        for step_number in range(steps):
             decision = control_decision(
                 desired_flow_lpm=self.desired_flow_lpm,
                 pressure_bar=self.plant.pressure_bar,
@@ -107,6 +115,16 @@ class DigitalTwin:
             )
             valve_flow = self.valve.estimate_flow(self.plant.pressure_bar)
             self.plant.step(valve_flow, self.dt_seconds)
+            trace["time_s"].append((step_number + 1) * self.dt_seconds)
+            trace["requested_opening_percent"].append(
+                decision["requested_opening_percent"]
+            )
+            trace["simulated_opening_percent"].append(
+                self.valve.opening_percent
+            )
+            trace["simulated_flow_lpm"].append(valve_flow)
+            trace["simulated_pressure_bar"].append(self.plant.pressure_bar)
+        self.last_trace = trace
         self.simulation_time_s += steps * self.dt_seconds
 
         alerts = self._build_alerts(
