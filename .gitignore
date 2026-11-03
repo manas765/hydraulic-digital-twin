@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Dataset (large; download from UCI, see README)
+data/raw/
+
+# Generated files (recreate with the commands in the README)
+data/processed/
+models/
