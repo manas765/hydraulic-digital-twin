@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 
 from .config import REPORT_DIR
+from .controller import RESTRICTED_MAX_OPENING_PERCENT, ControlLimits
+from .plant_model import HydraulicPlant
+from .proportional_valve import ProportionalValve
 
 # Wording required by the project plan for every displayed value
 SOURCE_LABELS = {
@@ -180,3 +183,88 @@ def report_frame(results: dict) -> pd.DataFrame:
             "Cycles": int(item["support"]),
         })
     return pd.DataFrame(rows)
+
+
+
+CONTROL_MODE_NAMES = {
+    "NORMAL_SIMULATION": "Normal",
+    "RESTRICTED_SIMULATION": "Restricted",
+    "FAULT_REVIEW": "Fault review",
+    "INHIBIT": "Inhibited",
+    "SAFE_SIMULATION_STATE": "Safe state",
+}
+
+COMPONENT_NAMES = {
+    "cooler_condition": "Cooler condition",
+    "pump_leakage": "Pump leakage",
+    "accumulator_pressure": "Accumulator pressure",
+}
+
+
+def pretty_mode(mode: str) -> str:
+    return CONTROL_MODE_NAMES.get(mode, mode.replace("_", " ").title())
+
+
+def condition_tone(predicted) -> str:
+    """Colour class for the predicted valve condition."""
+    return {100: "ok", 90: "minor", 80: "major", 73: "critical"}.get(
+        predicted, "none"
+    )
+
+
+def load_report_csv(name: str):
+    path = REPORT_DIR / name
+    if not path.exists():
+        return None
+    return pd.read_csv(path)
+
+
+def robustness_findings(table: pd.DataFrame, gap_threshold: float = 0.10):
+    """Plain-language findings: where does valve accuracy depend on another
+    component's condition? Largest gaps first."""
+    findings = []
+    for component, group in table.groupby("component"):
+        low = group.loc[group["accuracy"].idxmin()]
+        high = group.loc[group["accuracy"].idxmax()]
+        gap = float(high["accuracy"] - low["accuracy"])
+        if gap >= gap_threshold:
+            name = COMPONENT_NAMES.get(component, component)
+            findings.append((gap, (
+                f"{name}: valve accuracy is {low['accuracy']:.2f} at label "
+                f"{int(low['label'])} ({int(low['cycles'])} cycles), against "
+                f"{high['accuracy']:.2f} at label {int(high['label'])}."
+            )))
+    return [text for _, text in sorted(findings, reverse=True)]
+
+
+def assumption_rows() -> list:
+    """Every simulation setting that is an assumption, read from the code so
+    the documentation cannot drift from what actually runs."""
+    valve = ProportionalValve()
+    plant = HydraulicPlant()
+    limits = ControlLimits()
+    return [
+        ("Valve", "Maximum flow", valve.max_flow_lpm, "L/min"),
+        ("Valve", "Response time constant",
+         valve.response_time_constant_s, "s"),
+        ("Valve", "Reference pressure drop",
+         valve.reference_pressure_drop_bar, "bar"),
+        ("Plant", "Pump flow", plant.pump_flow_lpm, "L/min"),
+        ("Plant", "Leak flow", plant.leak_flow_lpm, "L/min"),
+        ("Plant", "Pressure gain", plant.pressure_gain_bar_per_lpm_s,
+         "bar per (L/min s)"),
+        ("Plant", "Initial pressure", plant.pressure_bar, "bar"),
+        ("Plant", "Hard pressure cap", plant.supply_pressure_bar, "bar"),
+        ("Plant", "Relief setting", plant.relief_setting_bar, "bar"),
+        ("Plant", "Relief gain", plant.relief_gain_lpm_per_bar,
+         "L/min per bar"),
+        ("Controller", "Pressure limits",
+         f"{limits.min_pressure_bar:g} to {limits.max_pressure_bar:g}",
+         "bar"),
+        ("Controller", "Largest accepted demand", limits.max_flow_lpm,
+         "L/min"),
+        ("Controller", "Valve rated flow (demand conversion)",
+         limits.valve_rated_flow_lpm, "L/min"),
+        ("Controller", "Opening cap in restricted mode",
+         RESTRICTED_MAX_OPENING_PERCENT, "%"),
+    ]

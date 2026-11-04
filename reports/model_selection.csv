@@ -1,0 +1,4 @@
+model,macro_f1_mean,spread_across_seeds,mean_diff_vs_baseline,fold_win_fraction,seed_win_fraction,replaces_baseline
+Random forest (baseline),0.8757598750769156,0.015819225699251312,,,,
+Hist. gradient boosting,0.9258072962741071,0.008321470563953371,0.05004742119719159,0.9,1.0,True
+Logistic regression (scaled),0.8753418378803876,0.008012611592557603,-0.00041803719652787395,0.52,0.6,False

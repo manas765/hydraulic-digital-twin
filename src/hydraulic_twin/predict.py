@@ -1,11 +1,12 @@
 import json
+import warnings
 from functools import lru_cache
 
 import joblib
 import numpy as np
 import pandas as pd
 
-from .config import MODEL_DIR
+from .config import MODEL_DIR, PROCESSED_DATA_DIR
 
 MODEL_PATH = MODEL_DIR / "valve_health_pipeline.joblib"
 FEATURES_PATH = MODEL_DIR / "valve_health_features.json"
@@ -18,16 +19,52 @@ CONDITION_MEANINGS = {
 }
 
 
-@lru_cache(maxsize=1)
-def _load_model():
-    if not MODEL_PATH.exists() or not FEATURES_PATH.exists():
+def _train_from_processed_data():
+    """Retrain the baseline model (stable cycles, same settings and seed as
+    train_valve_model.py) from the processed feature table."""
+    from .train_valve_model import make_model
+
+    features_file = PROCESSED_DATA_DIR / "features.csv"
+    targets_file = PROCESSED_DATA_DIR / "targets.csv"
+    if not features_file.exists() or not targets_file.exists():
         raise FileNotFoundError(
-            "Model files not found. Train first with: "
+            "No saved model and no processed data to train from. Run: "
+            "python -m src.hydraulic_twin.preprocessing and "
             "python -m src.hydraulic_twin.train_valve_model"
         )
-    model = joblib.load(MODEL_PATH)
-    with open(FEATURES_PATH, encoding="utf-8") as f:
-        feature_names = json.load(f)
+
+    X = pd.read_csv(features_file)
+    targets = pd.read_csv(targets_file)
+    stable = targets["stable_flag"] == 0
+    X = X.loc[stable].drop(columns=["cycle_id"])
+    y = targets.loc[stable, "valve_condition"]
+
+    model = make_model()
+    model.fit(X, y)
+    return model, list(X.columns)
+
+
+@lru_cache(maxsize=1)
+def _load_model():
+    try:
+        model = joblib.load(MODEL_PATH)
+        with open(FEATURES_PATH, encoding="utf-8") as f:
+            feature_names = json.load(f)
+        return model, feature_names
+    except Exception as error:  # missing file, or saved by another version
+        warnings.warn(
+            f"Could not load the saved model ({type(error).__name__}); "
+            "retraining it from the processed data."
+        )
+
+    model, feature_names = _train_from_processed_data()
+    try:  # cache for next time; a read-only disk is not a problem
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
+        joblib.dump(model, MODEL_PATH)
+        with open(FEATURES_PATH, "w", encoding="utf-8") as f:
+            json.dump(feature_names, f, indent=2)
+    except OSError:
+        pass
     return model, feature_names
 
 

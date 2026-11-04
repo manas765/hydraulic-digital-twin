@@ -106,7 +106,8 @@
 <div id="controls" class="panel">
   <button id="btn-play">Pause</button>
   <button id="btn-restart">Restart</button>
-  <button id="btn-end">Jump to end</button>
+   <button id="btn-end">Jump to end</button>
+  <button id="btn-panels">Hide panels</button>
   <input id="slider" type="range" min="0" value="0" step="1">
   <span id="hud-time"></span>
   <select id="speed">
@@ -252,7 +253,7 @@
       var sprite = new THREE.Sprite(
         new THREE.SpriteMaterial({ map: tex, transparent: true }));
       sprite.position.set(x, y, z);
-      sprite.scale.set(scale * 4, scale, 1);
+            sprite.scale.set(scale * 4 * 1.7, scale * 1.7, 1);;
       scene.add(sprite);
       return sprite;
     }
@@ -362,7 +363,7 @@
       }
       return path.points[path.points.length - 1];
     }
-    var particleGeometry = new THREE.SphereGeometry(0.09, 10, 8);
+        var particleGeometry = new THREE.SphereGeometry(0.19, 12, 8);
     function makeGroup(points, color, spacing) {
       var path = makePath(points);
       var count = Math.max(3, Math.round(path.total / spacing));
@@ -414,7 +415,7 @@
     // ---- camera (simple orbit controls, no extra libraries)
     var theta = 0.75;
     var phi = 1.1;
-    var radius = 24;
+        var radius = 19;
     var target = { x: 1.8, y: 1.6, z: -0.6 };
     function updateCamera() {
       camera.position.set(
@@ -554,6 +555,12 @@
     var i = parseInt($("slider").value, 10);
     tSim = T.time_s[i];
     setFrame(i);
+  });
+    $("btn-panels").addEventListener("click", function () {
+    var hidden = $("hud").style.display === "none";
+    $("hud").style.display = hidden ? "block" : "none";
+    $("legend").style.display = hidden ? "block" : "none";
+    $("btn-panels").textContent = hidden ? "Hide panels" : "Show panels";
   });
   $("speed").addEventListener("change", function () {
     speedMul = parseFloat($("speed").value);

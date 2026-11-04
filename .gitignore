@@ -10,9 +10,8 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Dataset (large; download from UCI, see README)
+# Raw dataset (large; download from UCI, see README)
 data/raw/
 
-# Generated files (recreate with the commands in the README)
-data/processed/
-models/
+# Generated pages
+reports/twin_3d_*.html

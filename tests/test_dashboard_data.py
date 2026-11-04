@@ -79,3 +79,33 @@ def test_confusion_and_report_frames_from_saved_results(tmp_path, monkeypatch):
     confusion = dd.confusion_frame(loaded)
     assert confusion.loc["True 90", "Predicted 100"] == 1
     assert list(dd.report_frame(loaded)["Valve class"]) == [73, 80, 90, 100]
+
+    
+
+def test_pretty_mode_and_condition_tone():
+    assert dd.pretty_mode("RESTRICTED_SIMULATION") == "Restricted"
+    assert dd.pretty_mode("SOMETHING_NEW") == "Something New"
+    assert dd.condition_tone(73) == "critical"
+    assert dd.condition_tone(None) == "none"
+
+
+def test_robustness_findings_report_largest_gap_first():
+    table = pd.DataFrame({
+        "component": ["cooler_condition"] * 2 + ["pump_leakage"] * 2,
+        "label": [3, 100, 0, 2],
+        "cycles": [480, 489, 489, 480],
+        "accuracy": [0.70, 0.95, 0.90, 0.85],
+    })
+    findings = dd.robustness_findings(table, gap_threshold=0.04)
+    assert len(findings) == 2
+    assert findings[0].startswith("Cooler condition")
+    assert "0.70" in findings[0] and "label 3" in findings[0]
+    assert dd.robustness_findings(table, gap_threshold=0.5) == []
+
+
+def test_assumption_rows_come_from_the_code():
+    rows = dd.assumption_rows()
+    parameters = {(c, p): v for c, p, v, _ in rows}
+    assert parameters[("Valve", "Maximum flow")] == 20.0
+    assert parameters[("Plant", "Relief setting")] == 120.0
+    assert parameters[("Controller", "Pressure limits")] == "5 to 140"
