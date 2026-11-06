@@ -3,32 +3,40 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hydraulic digital twin - 3D schematic view</title>
+<title>Hydraulic rig - 3D schematic view</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0f1720;
-    color: #e6edf3;
+  html, body { margin: 0; height: 100%; overflow: hidden; color: #e6edf3;
+    background: #0c141d;
     font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  #view { position: fixed; top: 0; right: 0; bottom: 0; left: 0; }
+  #view { position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+    background: radial-gradient(ellipse at 50% 38%, #1d2d40 0%, #0c141d 72%); }
   #view canvas { display: block; touch-action: none; }
-  .panel { position: fixed; background: rgba(15, 23, 32, 0.84);
-    border: 1px solid #2b3a4a; border-radius: 8px; padding: 10px 12px;
+  #labels { position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+    pointer-events: none; overflow: hidden; z-index: 2; }
+  .lbl { position: absolute; transform: translate(-50%, -100%);
+    font-size: 11.5px; padding: 2px 7px; white-space: nowrap;
+    background: rgba(12, 20, 29, 0.85); border: 1px solid #3a4f66;
+    border-radius: 3px; color: #dbe6f2; }
+  .lbl.static { border-style: dashed; color: #9fb3c8; }
+  .panel { position: fixed; z-index: 5; background: rgba(12, 20, 29, 0.86);
+    border: 1px solid #2b3d52; border-radius: 6px; padding: 10px 12px;
     font-size: 12.5px; line-height: 1.45; }
-  #hud { top: 10px; left: 10px; width: 330px; max-height: calc(100% - 96px);
+  #hud { top: 10px; left: 10px; width: 320px; max-height: calc(100% - 96px);
     overflow-y: auto; }
-  #legend { top: 10px; right: 10px; width: 255px; }
+  #legend { top: 10px; right: 10px; width: 250px; }
   #controls { left: 10px; right: 10px; bottom: 10px; display: flex;
-    gap: 10px; align-items: center; }
-  #slider { flex: 1; }
-  .title { font-weight: 700; font-size: 14px; }
-  .note { color: #9fb3c8; margin: 4px 0 6px; }
-  .sect { margin-top: 8px; padding-top: 4px; border-top: 1px solid #2b3a4a;
-    font-weight: 700; font-size: 11.5px; letter-spacing: 0.04em; }
+    gap: 8px; align-items: center; flex-wrap: wrap; }
+  #slider { flex: 1; min-width: 120px; }
+  .title { font-weight: 700; font-size: 13.5px; }
+  .note { color: #9fb3c8; margin: 3px 0 6px; font-size: 11.5px; }
+  .sect { margin-top: 8px; padding-top: 4px; border-top: 1px solid #2b3d52;
+    font-weight: 700; font-size: 11px; letter-spacing: 0.06em; }
   .tag-data { color: #7ee787; }
   .tag-ml { color: #ffa657; }
   .tag-sim { color: #58a6ff; }
   .tag-user { color: #d2a8ff; }
   .row { display: flex; justify-content: space-between; gap: 8px; }
-  .row b { text-align: right; }
+  .row b { text-align: right; font-variant-numeric: tabular-nums; }
   .lvl-CRITICAL { color: #ff7b72; }
   .lvl-WARNING { color: #e3b341; }
   .lvl-INFO { color: #79c0ff; }
@@ -36,16 +44,20 @@
   .swatch { display: inline-block; width: 11px; height: 11px;
     border-radius: 2px; margin-right: 6px; vertical-align: middle; }
   .fine { color: #9fb3c8; font-size: 11px; margin-top: 6px; }
-  button, select { background: #21303f; color: #e6edf3; border: 1px solid #3b4d61;
-    border-radius: 6px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; }
-  #fallback { display: none; position: fixed; top: 50%; left: 50%;
+  .group { display: flex; gap: 4px; }
+  button, select { background: #1e2f42; color: #e6edf3;
+    border: 1px solid #3b5068; border-radius: 4px; padding: 5px 10px;
+    font-size: 12px; cursor: pointer; }
+  button:hover { background: #28405a; }
+  #fallback { display: none; position: fixed; top: 50%; left: 50%; z-index: 6;
     transform: translate(-50%, -50%); max-width: 420px; text-align: center;
-    background: #3b1f1f; border: 1px solid #8b3a3a; border-radius: 8px;
+    background: #3b1f1f; border: 1px solid #8b3a3a; border-radius: 6px;
     padding: 14px; }
 </style>
 </head>
 <body>
 <div id="view"></div>
+<div id="labels"></div>
 <div id="fallback"></div>
 
 <div id="hud" class="panel">
@@ -81,22 +93,23 @@
 
 <div id="legend" class="panel">
   <div class="title">Legend</div>
-  <div><span class="swatch" style="background:#2ecc71"></span>valve band 100%</div>
-  <div><span class="swatch" style="background:#f1c40f"></span>valve band 90%</div>
-  <div><span class="swatch" style="background:#e67e22"></span>valve band 80%</div>
-  <div><span class="swatch" style="background:#e74c3c"></span>valve band 73%</div>
-  <div><span class="swatch" style="background:#7f8c8d"></span>no prediction</div>
-  <div class="fine">Band colour = ML PREDICTION of valve condition.</div>
-  <div style="margin-top:6px"><span class="swatch" style="width:40px;
+  <div style="margin-top:4px"><span class="swatch" style="background:#2ecc71"></span>100 %
+    <span class="swatch" style="background:#f1c40f;margin-left:6px"></span>90 %
+    <span class="swatch" style="background:#e67e22;margin-left:6px"></span>80 %
+    <span class="swatch" style="background:#e74c3c;margin-left:6px"></span>73 %</div>
+  <div class="fine" style="margin-top:2px">Valve status cap and lamp =
+    ML PREDICTION. Grey = no prediction.</div>
+  <div style="margin-top:7px"><span class="swatch" style="width:40px;
     background:linear-gradient(90deg,#338cff,#f2cc33,#f23326)"></span>0 to
     supply cap</div>
-  <div class="fine">Upstream pipe colour = SIMULATED pressure.</div>
-  <div style="margin-top:6px"><span class="swatch" style="background:#22d3ee"></span>
-    spool = SIMULATED opening</div>
-  <div><span class="swatch" style="background:#ff9f1c"></span>ring = requested
-    opening (controller)</div>
-  <div><span class="swatch" style="background:#5ec8ff"></span>particles = SIMULATED
-    valve flow</div>
+  <div class="fine" style="margin-top:2px">Pipe colour and gauge needle =
+    SIMULATED pressure.</div>
+  <div style="margin-top:7px"><span class="swatch" style="background:#22d3ee"></span>
+    spool and scale marker = SIMULATED opening</div>
+  <div><span class="swatch" style="background:#ff9f1c"></span>orange marker =
+    requested opening (controller)</div>
+  <div><span class="swatch" style="background:#5ec8ff"></span>blue particles =
+    SIMULATED valve flow</div>
   <div><span class="swatch" style="background:#ff9f1c"></span>orange particles =
     SIMULATED relief flow</div>
   <div class="fine">Generic schematic, not the UCI rig geometry. The actuator
@@ -104,10 +117,11 @@
 </div>
 
 <div id="controls" class="panel">
-  <button id="btn-play">Pause</button>
-  <button id="btn-restart">Restart</button>
-   <button id="btn-end">Jump to end</button>
-  <button id="btn-panels">Hide panels</button>
+  <div class="group">
+    <button id="btn-play">Pause</button>
+    <button id="btn-restart">Restart</button>
+    <button id="btn-end">Jump to end</button>
+  </div>
   <input id="slider" type="range" min="0" value="0" step="1">
   <span id="hud-time"></span>
   <select id="speed">
@@ -116,6 +130,13 @@
     <option value="4" selected>4x</option>
     <option value="8">8x</option>
   </select>
+  <div class="group">
+    <button id="btn-view-overview">Overview</button>
+    <button id="btn-view-valve">Valve</button>
+    <button id="btn-view-front">Front</button>
+    <button id="btn-view-top">Top</button>
+    <button id="btn-panels">Hide panels</button>
+  </div>
 </div>
 
 <script src="__THREE_URL__"></script>
@@ -129,6 +150,7 @@
   var DT_TRACE = N > 1 ? T.time_s[1] - T.time_s[0] : 0.1;
   var DURATION = T.time_s[N - 1];
   var PARTICLE_UNITS_PER_LPM = 0.3;
+  var VALVE_X = 3.3;
 
   function $(id) { return document.getElementById(id); }
 
@@ -188,19 +210,28 @@
   // ---------------------------------------------------------------- scene
   function createScene() {
     var container = $("view");
-    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setClearColor(0x000000, 0);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
 
     var scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0f1720);
-    var camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+    var camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 0.9));
-    var sun = new THREE.DirectionalLight(0xffffff, 0.8);
-    sun.position.set(6, 12, 8);
+    scene.add(new THREE.HemisphereLight(0xdfe9f5, 0x1a2430, 0.85));
+    var sun = new THREE.DirectionalLight(0xffffff, 0.9);
+    sun.position.set(8, 16, 10);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -18;
+    sun.shadow.camera.right = 18;
+    sun.shadow.camera.top = 12;
+    sun.shadow.camera.bottom = -12;
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far = 50;
     scene.add(sun);
-    scene.add(new THREE.GridHelper(40, 40, 0x2b3a4a, 0x1d2935));
 
     // ---- helpers
     function material(color, opts) {
@@ -208,131 +239,263 @@
       if (opts) { for (var k in opts) { o[k] = opts[k]; } }
       return new THREE.MeshStandardMaterial(o);
     }
-    function addMesh(geometry, mat, x, y, z) {
-      var mesh = new THREE.Mesh(geometry, mat);
+    function place(mesh, x, y, z, noShadow) {
       mesh.position.set(x, y, z);
+      if (!noShadow) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
       scene.add(mesh);
       return mesh;
     }
-    function box(w, h, d, mat, x, y, z) {
-      return addMesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z);
+    function box(w, h, d, mat, x, y, z, noShadow) {
+      return place(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat),
+                   x, y, z, noShadow);
     }
-    function cylinder(r, h, mat, x, y, z, lieAlongX) {
-      var mesh = addMesh(new THREE.CylinderGeometry(r, r, h, 24), mat, x, y, z);
-      if (lieAlongX) { mesh.rotation.z = Math.PI / 2; }
-      return mesh;
+    function cylinder(r, h, mat, x, y, z, alongX, noShadow) {
+      var mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 24), mat);
+      if (alongX) { mesh.rotation.z = Math.PI / 2; }
+      return place(mesh, x, y, z, noShadow);
+    }
+    function sphere(r, mat, x, y, z) {
+      return place(new THREE.Mesh(new THREE.SphereGeometry(r, 18, 12), mat),
+                   x, y, z);
     }
     function pipe(a, b, r, mat) {
-      var va = new THREE.Vector3(a[0], a[1], a[2]);
-      var vb = new THREE.Vector3(b[0], b[1], b[2]);
-      var dir = new THREE.Vector3().subVectors(vb, va);
+      var dir = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
       var len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
       var mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 16), mat);
-      mesh.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
       mesh.quaternion.setFromUnitVectors(
         new THREE.Vector3(0, 1, 0), dir.normalize());
-      scene.add(mesh);
-      return mesh;
+      return place(mesh, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2,
+                   (a[2] + b[2]) / 2);
     }
-    function joint(p, r, mat) {
-      return addMesh(new THREE.SphereGeometry(r, 14, 10), mat, p[0], p[1], p[2]);
-    }
-    function label(text, x, y, z, scale) {
-      var canvas = document.createElement("canvas");
-      canvas.width = 512;
-      canvas.height = 128;
-      var g = canvas.getContext("2d");
-      g.fillStyle = "rgba(15,23,32,0.8)";
-      g.fillRect(0, 0, 512, 128);
-      g.fillStyle = "#e6edf3";
-      g.font = "bold 42px sans-serif";
-      g.textAlign = "center";
-      g.textBaseline = "middle";
-      g.fillText(text, 256, 64);
-      var tex = new THREE.CanvasTexture(canvas);
-      var sprite = new THREE.Sprite(
-        new THREE.SpriteMaterial({ map: tex, transparent: true }));
-      sprite.position.set(x, y, z);
-            sprite.scale.set(scale * 4 * 1.7, scale * 1.7, 1);;
-      scene.add(sprite);
-      return sprite;
+    function joint(p, r, mat) { return sphere(r, mat, p[0], p[1], p[2]); }
+
+    var labels = [];
+    var labelLayer = $("labels");
+    function label(text, x, y, z, isStatic) {
+      var el = document.createElement("div");
+      el.className = isStatic ? "lbl static" : "lbl";
+      el.textContent = text;
+      labelLayer.appendChild(el);
+      labels.push({ el: el, pos: new THREE.Vector3(x, y, z) });
     }
 
     // ---- materials
-    var steel = material(0x8a98a8);
-    var darkSteel = material(0x4a5666);
-    var lowMat = material(0x4b6a8a);
-    var pressureMat = material(0x3388ff, { emissive: 0x112244 });
-    var bandMat = material(0x7f8c8d, { emissive: 0x111111 });
+    var steel = material(0x9aa7b5, { roughness: 0.4, metalness: 0.55 });
+    var darkSteel = material(0x3f4b5a, { roughness: 0.5, metalness: 0.5 });
+    var paintBlue = material(0x1d5b94, { roughness: 0.5, metalness: 0.3 });
+    var paintGrey = material(0x6f7f90, { roughness: 0.55, metalness: 0.35 });
+    var brass = material(0xc9a227, { roughness: 0.35, metalness: 0.7 });
+    var lowMat = material(0x56738f, { roughness: 0.4, metalness: 0.3,
+      transparent: true, opacity: 0.6, depthWrite: false });
+    var pressureMat = material(0x3388ff, { emissive: 0x112244,
+      roughness: 0.35, metalness: 0.2, transparent: true, opacity: 0.68,
+      depthWrite: false });
+    var glass = material(0x9fc3e6, { transparent: true, opacity: 0.22,
+      roughness: 0.1, metalness: 0, depthWrite: false });
+    var tankGlass = material(0x6b7f95, { transparent: true, opacity: 0.32,
+      roughness: 0.2, metalness: 0, depthWrite: false });
+    var oilMat = material(0xb7791f, { roughness: 0.8, metalness: 0 });
+    var boreMat = material(0x0a1118, { roughness: 0.9, metalness: 0,
+      transparent: true, opacity: 0.4, depthWrite: false });
+    var coilMat = material(0x174a7c, { roughness: 0.6, metalness: 0.2 });
+    var capMat = material(0x7f8c8d, { emissive: 0x000000 });
+    var lampMat = material(0x7f8c8d, { emissive: 0x111111 });
     var reliefMat = material(0x9a2f2f, { emissive: 0x000000 });
     var spoolMat = material(0x22d3ee, { emissive: 0x0b6f80 });
     var ghostMat = new THREE.MeshBasicMaterial({ color: 0xff9f1c });
+    var floorMat = material(0x111a24, { roughness: 0.95, metalness: 0 });
 
-    // ---- tank, pump, motor
-    box(3, 1.6, 2.2, material(0x6b7f95, { transparent: true, opacity: 0.35 }),
-        -7, 0.8, 0);
-    box(2.7, 0.9, 1.9, material(0xb7791f, { roughness: 0.9 }), -7, 0.5, 0);
-    label("Tank", -7, 2.3, 0, 0.55);
+    // ---- floor and base plate
+    var floor = new THREE.Mesh(new THREE.PlaneGeometry(90, 60), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.31;
+    floor.receiveShadow = true;
+    scene.add(floor);
+    var grid = new THREE.GridHelper(60, 60, 0x24323f, 0x182430);
+    grid.position.y = -0.30;
+    scene.add(grid);
+    box(20.6, 0.3, 4.3, darkSteel, 1.25, -0.15, -0.55);
 
-    box(1, 1, 1, steel, -4, 1.2, 0);
-    cylinder(0.5, 1.2, darkSteel, -4, 2.3, 0, false);
-    label("Pump + motor", -4, 3.6, 0, 0.55);
+    // ---- tank
+    box(3, 1.6, 2.2, tankGlass, -7, 0.8, 0, true);
+    box(2.7, 0.9, 1.9, oilMat, -7, 0.45, 0, true);
+    box(3.1, 0.12, 2.3, steel, -7, 1.66, 0);
+    cylinder(0.22, 0.16, darkSteel, -7.6, 1.8, 0.45);
+    cylinder(0.1, 0.4, steel, -6.4, 1.9, -0.5);
+    cylinder(0.07, 1.1, glass, -5.42, 0.8, 0.85, false, true);
+    cylinder(0.05, 0.55, oilMat, -5.42, 0.55, 0.85, false, true);
+    label("Tank", -7, 2.25, 0);
+
+    // ---- pump and motor
+    box(1, 1, 1, paintGrey, -4, 1.2, 0);
+    box(1.2, 0.1, 1.2, steel, -4, 1.7, 0);
+    box(1.2, 0.1, 1.2, steel, -4, 0.7, 0);
+    cylinder(0.5, 1.2, paintBlue, -4, 2.35, 0);
+    for (var f = 0; f < 5; f++) {
+      cylinder(0.56, 0.05, darkSteel, -4, 1.85 + f * 0.22, 0);
+    }
+    cylinder(0.46, 0.12, darkSteel, -4, 3.0, 0);
+    box(0.36, 0.3, 0.3, darkSteel, -4, 2.6, 0.62);
     pipe([-5.5, 0.5, 0], [-4, 0.5, 0], 0.12, lowMat);
     pipe([-4, 0.5, 0], [-4, 0.75, 0], 0.12, lowMat);
+    label("Pump + motor", -4, 3.35, 0);
 
     // ---- pressure line (colour follows SIMULATED pressure)
     pipe([-3.5, 1.2, 0], [0, 1.2, 0], 0.16, pressureMat);
     pipe([0, 1.2, 0], [2.4, 1.2, 0], 0.16, pressureMat);
     joint([0, 1.2, 0], 0.2, pressureMat);
 
+    // ---- pressure gauge (dial faces the camera; needle = SIMULATED)
+    var GAUGE_X = -1.8;
+    var GAUGE_Y = 2.75;
+    pipe([GAUGE_X, 1.2, 0], [GAUGE_X, GAUGE_Y - 0.69, 0], 0.07, pressureMat);
+    function gaugeFace() {
+      var canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 256;
+      var g = canvas.getContext("2d");
+      var max = D.limits.supply_pressure_bar;
+      var relief = D.limits.relief_setting_bar;
+      function ang(v) {
+        return (135 + 270 * Math.max(0, Math.min(1, v / max))) * Math.PI / 180;
+      }
+      g.fillStyle = "#0e1620";
+      g.beginPath();
+      g.arc(128, 128, 124, 0, Math.PI * 2);
+      g.fill();
+      g.lineWidth = 9;
+      g.strokeStyle = "#3b8eea";
+      g.beginPath();
+      g.arc(128, 128, 106, ang(0), ang(relief));
+      g.stroke();
+      g.strokeStyle = "#e3a008";
+      g.beginPath();
+      g.arc(128, 128, 106, ang(relief), ang(max));
+      g.stroke();
+      g.strokeStyle = "#e6edf3";
+      g.fillStyle = "#e6edf3";
+      g.lineWidth = 2;
+      g.font = "bold 17px sans-serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      for (var v = 0; v <= max + 0.1; v += 25) {
+        var a = ang(v);
+        g.beginPath();
+        g.moveTo(128 + Math.cos(a) * 84, 128 + Math.sin(a) * 84);
+        g.lineTo(128 + Math.cos(a) * 97, 128 + Math.sin(a) * 97);
+        g.stroke();
+        g.fillText(String(Math.round(v)), 128 + Math.cos(a) * 68,
+                   128 + Math.sin(a) * 68);
+      }
+      g.font = "bold 18px sans-serif";
+      g.fillText("bar", 128, 178);
+      g.font = "12px sans-serif";
+      g.fillStyle = "#9fb3c8";
+      g.fillText("SIMULATED", 128, 200);
+      return new THREE.CanvasTexture(canvas);
+    }
+    var gauge = new THREE.Group();
+    gauge.add(new THREE.Mesh(new THREE.CircleGeometry(0.55, 48),
+      new THREE.MeshBasicMaterial({ map: gaugeFace() })));
+    var bezel = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.05, 10, 48),
+                               steel);
+    gauge.add(bezel);
+    var needlePivot = new THREE.Group();
+    var needle = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.46, 0.01),
+      new THREE.MeshBasicMaterial({ color: 0xff6b3d }));
+    needle.position.set(0, 0.19, 0.02);
+    needlePivot.add(needle);
+    gauge.add(needlePivot);
+    var hub = new THREE.Mesh(new THREE.CircleGeometry(0.05, 16),
+      new THREE.MeshBasicMaterial({ color: 0xe6edf3 }));
+    hub.position.set(0, 0, 0.03);
+    gauge.add(hub);
+    gauge.scale.set(1.25, 1.25, 1.25);
+    gauge.position.set(GAUGE_X, GAUGE_Y, 0);
+    scene.add(gauge);
+    label("Pressure gauge", GAUGE_X, GAUGE_Y + 0.9, 0);
+
     // ---- accumulator
     pipe([0, 1.2, 0], [0, 1.6, 0], 0.12, pressureMat);
-    cylinder(0.42, 1.4, steel, 0, 2.3, 0, false);
-    addMesh(new THREE.SphereGeometry(0.42, 18, 12), steel, 0, 3.0, 0);
-    label("Accumulator", 0, 4.0, 0, 0.5);
+    cylinder(0.42, 1.4, steel, 0, 2.3, 0);
+    sphere(0.42, steel, 0, 3.0, 0);
+    cylinder(0.12, 0.22, brass, 0, 3.5, 0);
+    cylinder(0.46, 0.08, darkSteel, 0, 1.62, 0);
+    label("Accumulator", 0, 3.95, 0);
 
     // ---- relief branch
     pipe([0, 1.2, 0], [0, 1.2, -0.8], 0.12, pressureMat);
-    box(0.7, 0.7, 0.7, reliefMat, 0, 1.2, -1.2);
-    pipe([0, 1.2, -1.55], [0, 1.2, -2], 0.12, lowMat);
-    pipe([0, 1.2, -2], [0, 0.5, -2], 0.12, lowMat);
-    label("Relief valve", 0, 2.1, -1.2, 0.45);
+    box(0.6, 0.6, 0.6, reliefMat, 0, 1.2, -1.2);
+    cylinder(0.2, 0.5, reliefMat, 0, 1.75, -1.2);
+    cylinder(0.09, 0.14, darkSteel, 0, 2.07, -1.2);
+    pipe([0, 1.2, -1.5], [0, 1.2, -2.2], 0.12, lowMat);
+    pipe([0, 1.2, -2.2], [0, 0.35, -2.2], 0.12, lowMat);
+    label("Relief valve", 0, 2.45, -1.2);
 
-    // ---- proportional valve with spool
-    box(1.8, 1.1, 1.1, steel, 3.3, 1.2, 0);
-    var band = box(0.4, 1.22, 1.22, bandMat, 3.3, 1.2, 0);
+    // ---- proportional valve: translucent body shows the sliding spool
+    box(1.6, 0.65, 0.9, darkSteel, VALVE_X, 0.325, 0);
+    box(1.8, 1.1, 1.1, glass, VALVE_X, 1.2, 0, true);
+    box(0.16, 1.2, 1.2, capMat, VALVE_X - 0.82, 1.2, 0);
+    box(0.16, 1.2, 1.2, steel, VALVE_X + 0.82, 1.2, 0);
+    cylinder(0.34, 1.5, boreMat, VALVE_X, 1.2, 0, true, true);
     var spool = new THREE.Group();
-    var rod = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 16),
+    var rod = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.9, 16),
                              spoolMat);
-    var cap = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), spoolMat);
-    cap.position.set(0, 0.7, 0);
+    rod.rotation.z = Math.PI / 2;
     spool.add(rod);
-    spool.add(cap);
+    [-0.35, 0, 0.35].forEach(function (dx) {
+      var land = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.1, 24),
+                                spoolMat);
+      land.rotation.z = Math.PI / 2;
+      land.position.x = dx;
+      spool.add(land);
+    });
+    spool.position.set(VALVE_X, 1.2, 0);
     scene.add(spool);
-    var SPOOL_BASE = 1.55;
-    var SPOOL_TRAVEL = 0.9;
-    spool.position.set(3.3, SPOOL_BASE, 0);
-    var ghost = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.035, 8, 28),
-                               ghostMat);
-    ghost.rotation.x = Math.PI / 2;
-    scene.add(ghost);
-    box(0.04, SPOOL_TRAVEL, 0.04, darkSteel, 3.75, SPOOL_BASE + 0.7 +
-        SPOOL_TRAVEL / 2, 0);
-    label("Proportional valve", 3.3, 4.2, 0, 0.5);
+    cylinder(0.42, 0.75, coilMat, VALVE_X, 2.125, 0);
+    cylinder(0.46, 0.08, darkSteel, VALVE_X, 2.54, 0);
+    box(0.3, 0.28, 0.3, darkSteel, VALVE_X, 2.15, 0.55);
+    sphere(0.15, lampMat, VALVE_X, 2.8, 0);
+    label("Proportional valve", VALVE_X, 3.2, 0);
+
+    // position scale on both faces of the pedestal
+    function makeScale(zSign) {
+      var z = 0.47 * zSign;
+      box(1.2, 0.04, 0.02, steel, VALVE_X, 0.42, z, true);
+      [0, 0.5, 1].forEach(function (frac) {
+        box(0.03, 0.16, 0.02, steel, VALVE_X - 0.6 + 1.2 * frac, 0.42, z, true);
+      });
+      var sim = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, 10), spoolMat);
+      sim.position.set(VALVE_X - 0.6, 0.26, z);
+      scene.add(sim);
+      var req = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, 10), ghostMat);
+      req.rotation.x = Math.PI;
+      req.position.set(VALVE_X - 0.6, 0.58, z);
+      scene.add(req);
+      return { sim: sim, req: req };
+    }
+    var scales = [makeScale(1), makeScale(-1)];
 
     // ---- actuator (static: not simulated)
     pipe([4.2, 1.2, 0], [6.1, 1.2, 0], 0.14, lowMat);
     cylinder(0.5, 2.6, darkSteel, 7.4, 1.2, 0, true);
+    cylinder(0.57, 0.16, steel, 6.12, 1.2, 0, true);
+    cylinder(0.57, 0.16, steel, 8.68, 1.2, 0, true);
     cylinder(0.16, 1.7, steel, 9.55, 1.2, 0, true);
+    box(0.3, 0.45, 0.9, darkSteel, 6.7, 0.475, 0);
+    box(0.3, 0.45, 0.9, darkSteel, 8.1, 0.475, 0);
     box(0.25, 0.6, 0.6, steel, 10.5, 1.2, 0);
-    label("Actuator (not simulated)", 8.2, 2.4, 0, 0.5);
+    label("Actuator (not simulated)", 8.2, 2.1, 0, true);
 
     // ---- return line
-    pipe([8.4, 0.75, 0], [8.4, 0.5, 0], 0.12, lowMat);
-    pipe([8.4, 0.5, 0], [8.4, 0.5, -2], 0.12, lowMat);
-    pipe([8.4, 0.5, -2], [-7, 0.5, -2], 0.12, lowMat);
-    pipe([-7, 0.5, -2], [-7, 0.5, -1.0], 0.12, lowMat);
-    [[8.4, 0.5, 0], [8.4, 0.5, -2], [-7, 0.5, -2]].forEach(function (p) {
+    pipe([8.4, 0.75, 0], [8.4, 0.35, 0], 0.12, lowMat);
+    pipe([8.4, 0.35, 0], [8.4, 0.35, -2.2], 0.12, lowMat);
+    pipe([8.4, 0.35, -2.2], [-7, 0.35, -2.2], 0.12, lowMat);
+    pipe([-7, 0.35, -2.2], [-7, 0.35, -1.0], 0.12, lowMat);
+    [[8.4, 0.35, 0], [8.4, 0.35, -2.2], [-7, 0.35, -2.2]].forEach(function (p) {
       joint(p, 0.15, lowMat);
     });
 
@@ -363,7 +526,7 @@
       }
       return path.points[path.points.length - 1];
     }
-        var particleGeometry = new THREE.SphereGeometry(0.19, 12, 8);
+    var particleGeometry = new THREE.SphereGeometry(0.095, 12, 8);
     function makeGroup(points, color, spacing) {
       var path = makePath(points);
       var count = Math.max(3, Math.round(path.total / spacing));
@@ -389,17 +552,20 @@
 
     var upstream = makeGroup([[-3.5, 1.2, 0], [0, 1.2, 0]], 0x5ec8ff, 0.7);
     var mainLine = makeGroup(
-      [[0, 1.2, 0], [6.1, 1.2, 0], [8.4, 1.2, 0], [8.4, 0.5, 0],
-       [8.4, 0.5, -2], [-7, 0.5, -2], [-7, 0.5, -1.0]], 0x5ec8ff, 0.9);
+      [[0, 1.2, 0], [6.1, 1.2, 0], [8.4, 1.2, 0], [8.4, 0.35, 0],
+       [8.4, 0.35, -2.2], [-7, 0.35, -2.2], [-7, 0.35, -1.0]], 0x5ec8ff, 0.9);
     var reliefLine = makeGroup(
-      [[0, 1.2, 0], [0, 1.2, -2], [0, 0.5, -2]], 0xff9f1c, 0.5);
+      [[0, 1.2, 0], [0, 1.2, -2.2], [0, 0.35, -2.2]], 0xff9f1c, 0.5);
     var groups = [upstream, mainLine, reliefLine];
 
     // ---- colours
-    var BAND_COLORS = { 100: 0x2ecc71, 90: 0xf1c40f, 80: 0xe67e22, 73: 0xe74c3c };
-    bandMat.color.setHex(
-      D.predicted_condition === null ? 0x7f8c8d
-        : (BAND_COLORS[D.predicted_condition] || 0x7f8c8d));
+    var STATUS_COLORS = { 100: 0x2ecc71, 90: 0xf1c40f, 80: 0xe67e22,
+                          73: 0xe74c3c };
+    var statusColor = D.predicted_condition === null ? 0x7f8c8d
+      : (STATUS_COLORS[D.predicted_condition] || 0x7f8c8d);
+    capMat.color.setHex(statusColor);
+    lampMat.color.setHex(statusColor);
+    lampMat.emissive.setHex(statusColor);
 
     function lerp(a, b, t) { return a + (b - a) * t; }
     function pressureRGB(p) {
@@ -412,39 +578,57 @@
       return [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2], b[2], u)];
     }
 
-    // ---- camera (simple orbit controls, no extra libraries)
-    var theta = 0.75;
-    var phi = 1.1;
-        var radius = 19;
-    var target = { x: 1.8, y: 1.6, z: -0.6 };
+    // ---- camera: orbit controls and view presets (no extra libraries)
+    var views = {
+      overview: { theta: 0.75, phi: 1.1, radius: 22.5, tx: 0.8, ty: 1.3, tz: -0.6 },
+      valve: { theta: 0.45, phi: 1.2, radius: 8.5, tx: 3.3, ty: 1.4, tz: 0 },
+      front: { theta: 0, phi: 1.3, radius: 19, tx: 1.2, ty: 1.3, tz: -0.6 },
+      top: { theta: 0, phi: 0.3, radius: 21, tx: 1.2, ty: 0, tz: -0.6 }
+    };
+    var cam = {};
+    var KEYS = ["theta", "phi", "radius", "tx", "ty", "tz"];
+    KEYS.forEach(function (k) { cam[k] = views.overview[k]; });
+    var tween = null;
+
     function updateCamera() {
       camera.position.set(
-        target.x + radius * Math.sin(phi) * Math.sin(theta),
-        target.y + radius * Math.cos(phi),
-        target.z + radius * Math.sin(phi) * Math.cos(theta));
-      camera.lookAt(new THREE.Vector3(target.x, target.y, target.z));
+        cam.tx + cam.radius * Math.sin(cam.phi) * Math.sin(cam.theta),
+        cam.ty + cam.radius * Math.cos(cam.phi),
+        cam.tz + cam.radius * Math.sin(cam.phi) * Math.cos(cam.theta));
+      camera.lookAt(new THREE.Vector3(cam.tx, cam.ty, cam.tz));
     }
+    function setView(name) {
+      if (!views[name]) { return; }
+      var from = {};
+      KEYS.forEach(function (k) { from[k] = cam[k]; });
+      tween = { from: from, to: views[name], t: 0 };
+    }
+
     var dragging = false;
     var lastX = 0;
     var lastY = 0;
     var canvas = renderer.domElement;
     canvas.addEventListener("pointerdown", function (e) {
       dragging = true;
+      tween = null;
       lastX = e.clientX;
       lastY = e.clientY;
     });
     window.addEventListener("pointerup", function () { dragging = false; });
     window.addEventListener("pointermove", function (e) {
       if (!dragging) { return; }
-      theta -= (e.clientX - lastX) * 0.005;
-      phi = Math.max(0.15, Math.min(1.5, phi - (e.clientY - lastY) * 0.005));
+      cam.theta -= (e.clientX - lastX) * 0.005;
+      cam.phi = Math.max(0.15, Math.min(1.5,
+        cam.phi - (e.clientY - lastY) * 0.005));
       lastX = e.clientX;
       lastY = e.clientY;
       updateCamera();
     });
     canvas.addEventListener("wheel", function (e) {
       e.preventDefault();
-      radius = Math.max(6, Math.min(45, radius * (e.deltaY > 0 ? 1.1 : 0.9)));
+      tween = null;
+      cam.radius = Math.max(5, Math.min(45,
+        cam.radius * (e.deltaY > 0 ? 1.1 : 0.9)));
       updateCamera();
     }, { passive: false });
 
@@ -459,18 +643,68 @@
     resize();
     updateCamera();
 
+    var projected = new THREE.Vector3();
+    function placeLabels() {
+      var w = container.clientWidth || window.innerWidth;
+      var h = container.clientHeight || window.innerHeight;
+      var shown = [];
+      labels.forEach(function (item) {
+        projected.copy(item.pos).project(camera);
+        var visible = projected.z > -1 && projected.z < 1;
+        item.el.style.display = visible ? "block" : "none";
+        if (visible) {
+          item.sx = (projected.x * 0.5 + 0.5) * w;
+          item.sy = (-projected.y * 0.5 + 0.5) * h;
+          shown.push(item);
+        }
+      });
+      // push overlapping labels upwards so every label stays readable
+      shown.sort(function (a, b) { return b.sy - a.sy; });
+      var placed = [];
+      shown.forEach(function (item) {
+        var lw = item.el.offsetWidth || 90;
+        var lh = item.el.offsetHeight || 20;
+        var y = item.sy;
+        for (var tries = 0; tries < 12; tries++) {
+          var clash = false;
+          for (var k = 0; k < placed.length; k++) {
+            var o = placed[k];
+            if (Math.abs(item.sx - o.x) < (lw + o.w) / 2 &&
+                Math.abs(y - o.y) < (lh + o.h) / 2 + 2) {
+              clash = true;
+              y = o.y - (lh + o.h) / 2 - 3;
+              break;
+            }
+          }
+          if (!clash) { break; }
+        }
+        placed.push({ x: item.sx, y: y, w: lw, h: lh });
+        item.el.style.left = item.sx + "px";
+        item.el.style.top = y + "px";
+      });
+    }
+
     return {
       update: function (i) {
-        var open = T.simulated_opening_percent[i];
-        var req = T.requested_opening_percent[i];
+        var frac = T.simulated_opening_percent[i] / 100;
+        var reqFrac = T.requested_opening_percent[i] / 100;
         var flow = T.simulated_flow_lpm[i];
         var relief = T.simulated_relief_flow_lpm[i];
-        var rgb = pressureRGB(T.simulated_pressure_bar[i]);
+        var pressureBar = T.simulated_pressure_bar[i];
+        var rgb = pressureRGB(pressureBar);
 
-        spool.position.y = SPOOL_BASE + SPOOL_TRAVEL * open / 100;
-        ghost.position.set(3.3, SPOOL_BASE + SPOOL_TRAVEL * req / 100 + 0.7, 0);
+        spool.position.x = VALVE_X - 0.3 + 0.6 * frac;
+        scales.forEach(function (s) {
+          s.sim.position.x = VALVE_X - 0.6 + 1.2 * frac;
+          s.req.position.x = VALVE_X - 0.6 + 1.2 * reqFrac;
+        });
+        var t = Math.max(0, Math.min(1,
+          pressureBar / D.limits.supply_pressure_bar));
+        needlePivot.rotation.z = (135 - 270 * t) * Math.PI / 180;
+
         pressureMat.color.setRGB(rgb[0], rgb[1], rgb[2]);
-        pressureMat.emissive.setRGB(rgb[0] * 0.25, rgb[1] * 0.25, rgb[2] * 0.25);
+        pressureMat.emissive.setRGB(rgb[0] * 0.25, rgb[1] * 0.25,
+                                    rgb[2] * 0.25);
         reliefMat.emissive.setHex(relief > 0.05 ? 0x992200 : 0x000000);
 
         upstream.speed = (flow + relief) * PARTICLE_UNITS_PER_LPM;
@@ -481,7 +715,22 @@
       step: function (dt) {
         groups.forEach(function (g) { advanceGroup(g, dt); });
       },
-      render: function () { renderer.render(scene, camera); }
+      animate: function (dt) {
+        if (!tween) { return; }
+        tween.t = Math.min(1, tween.t + dt / 0.9);
+        var e = tween.t * tween.t * (3 - 2 * tween.t);
+        KEYS.forEach(function (k) {
+          cam[k] = tween.from[k] + (tween.to[k] - tween.from[k]) * e;
+        });
+        updateCamera();
+        if (tween.t >= 1) { tween = null; }
+      },
+      setView: setView,
+      render: function () {
+        gauge.quaternion.copy(camera.quaternion);
+        renderer.render(scene, camera);
+        placeLabels();
+      }
     };
   }
 
@@ -528,6 +777,7 @@
     }
     if (scene3d) {
       if (playing) { scene3d.step(dt); }
+      scene3d.animate(dt);
       scene3d.render();
     }
     requestAnimationFrame(tick);
@@ -556,7 +806,19 @@
     tSim = T.time_s[i];
     setFrame(i);
   });
-    $("btn-panels").addEventListener("click", function () {
+  $("btn-view-overview").addEventListener("click", function () {
+    if (scene3d) { scene3d.setView("overview"); }
+  });
+  $("btn-view-valve").addEventListener("click", function () {
+    if (scene3d) { scene3d.setView("valve"); }
+  });
+  $("btn-view-front").addEventListener("click", function () {
+    if (scene3d) { scene3d.setView("front"); }
+  });
+  $("btn-view-top").addEventListener("click", function () {
+    if (scene3d) { scene3d.setView("top"); }
+  });
+  $("btn-panels").addEventListener("click", function () {
     var hidden = $("hud").style.display === "none";
     $("hud").style.display = hidden ? "block" : "none";
     $("legend").style.display = hidden ? "block" : "none";
@@ -565,6 +827,12 @@
   $("speed").addEventListener("change", function () {
     speedMul = parseFloat($("speed").value);
   });
+
+  if (window.innerWidth < 1350) {
+    $("hud").style.display = "none";
+    $("legend").style.display = "none";
+    $("btn-panels").textContent = "Show panels";
+  }
 
   setFrame(0);
   requestAnimationFrame(tick);

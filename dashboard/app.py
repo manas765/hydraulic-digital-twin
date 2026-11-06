@@ -1,4 +1,3 @@
-from html import escape
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 import sys
@@ -10,7 +9,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.hydraulic_twin.config import (  # noqa: E402
-    MODEL_DIR,
     PROCESSED_DATA_DIR,
     PROFILE_COLUMNS,
     SENSOR_RATES,
@@ -45,61 +43,31 @@ from src.hydraulic_twin.three_view import (  # noqa: E402
     render_html,
 )
 from src.hydraulic_twin.twin_state import DigitalTwin  # noqa: E402
+from src.hydraulic_twin.ui_components import (  # noqa: E402
+    STYLE,
+    alerts_html,
+    card,
+    card_grid,
+    footer_html,
+    header_html,
+    section_html,
+)
 
 APP_VERSION = "1.0"
 
 st.set_page_config(
     page_title="Hydraulic System Condition Monitoring",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-STYLE = """<style>
-.block-container { padding-top: 1.4rem; }
-.hx-header { display: flex; justify-content: space-between;
-  align-items: flex-end; gap: 1rem; border-bottom: 2px solid #0b5cad;
-  padding-bottom: .6rem; margin-bottom: 1rem; }
-.hx-title { font-size: 1.45rem; font-weight: 700; color: #12263a; }
-.hx-subtitle { color: #5a6b7d; font-size: .85rem; margin-top: .15rem; }
-.hx-mode { font-size: .72rem; font-weight: 700; letter-spacing: .06em;
-  color: #7a4a00; background: #fff4de; border: 1px solid #f0c987;
-  padding: .3rem .6rem; border-radius: 3px; white-space: nowrap; }
-.hx-grid { display: grid; gap: .75rem; margin: .4rem 0 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
-.hx-card { background: #ffffff; border: 1px solid #d7dde5;
-  border-top: 3px solid #0b5cad; border-radius: 4px;
-  padding: .65rem .8rem; }
-.hx-card.tone-ok { border-top-color: #2e8b57; }
-.hx-card.tone-minor { border-top-color: #d4a017; }
-.hx-card.tone-major { border-top-color: #e07b00; }
-.hx-card.tone-critical { border-top-color: #c62828; }
-.hx-card.tone-none { border-top-color: #8a97a6; }
-.hx-card-top { display: flex; justify-content: space-between;
-  align-items: center; gap: .4rem; }
-.hx-label { font-size: .72rem; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .05em; color: #5a6b7d; }
-.hx-value { font-size: 1.55rem; font-weight: 700; color: #12263a;
-  margin: .2rem 0 .1rem; font-variant-numeric: tabular-nums; }
-.hx-sub { font-size: .78rem; color: #5a6b7d; min-height: 1.1rem; }
-.hx-badge { font-size: .62rem; font-weight: 700; letter-spacing: .05em;
-  padding: .1rem .4rem; border-radius: 2px; white-space: nowrap; }
-.hx-dataset { background: #e3f4e8; color: #17613a; }
-.hx-ml { background: #fdeccf; color: #8a4b00; }
-.hx-sim { background: #dcebfb; color: #0b4a8f; }
-.hx-user { background: #ece4f8; color: #53318f; }
-.hx-alert { display: flex; gap: .7rem; align-items: baseline;
-  padding: .4rem .6rem; border-left: 4px solid #8a97a6;
-  background: #f6f8fa; margin: .25rem 0; font-size: .88rem;
-  color: #1b2733; }
-.hx-alert.CRITICAL { border-left-color: #c62828; background: #fdeeee; }
-.hx-alert.WARNING { border-left-color: #e08a00; background: #fff6e6; }
-.hx-alert.INFO { border-left-color: #0b5cad; background: #eef5fd; }
-.hx-alert-level { font-weight: 700; font-size: .7rem; min-width: 4.4rem;
-  letter-spacing: .05em; }
-.hx-alert-src { color: #5a6b7d; font-size: .72rem; min-width: 10.5rem; }
-.hx-footer { color: #7a8794; font-size: .75rem; margin-top: 1.5rem;
-  border-top: 1px solid #d7dde5; padding-top: .6rem; }
-</style>"""
+
 st.markdown(STYLE, unsafe_allow_html=True)
+
+
+def section(title):
+    st.markdown(section_html(title), unsafe_allow_html=True)
+
 
 REQUIRED_FILES = [
     PROCESSED_DATA_DIR / "features.csv",
@@ -198,40 +166,6 @@ relief_flow = state["simulated_relief_flow_lpm"]["value"]
 labels = {k: v["value"] for k, v in state["dataset_labels"].items()}
 unstable = labels["stable_flag"] == 1
 
-BADGES = {
-    "dataset": ("DATASET", "hx-dataset"),
-    "ml": ("ML ESTIMATE", "hx-ml"),
-    "sim": ("SIMULATED", "hx-sim"),
-    "user": ("USER SETTING", "hx-user"),
-}
-
-
-def card(label, value, kind, sub="", tone="none"):
-    text, css = BADGES[kind]
-    return (
-        f'<div class="hx-card tone-{tone}"><div class="hx-card-top">'
-        f'<span class="hx-label">{escape(label)}</span>'
-        f'<span class="hx-badge {css}">{text}</span></div>'
-        f'<div class="hx-value">{escape(value)}</div>'
-        f'<div class="hx-sub">{escape(sub)}</div></div>'
-    )
-
-
-def alerts_html(alerts):
-    if not alerts:
-        return ('<div class="hx-alert"><span class="hx-alert-level">NONE'
-                '</span><span>No alerts for this cycle.</span></div>')
-    rows = []
-    for a in alerts:
-        source = SOURCE_LABELS.get(a["source"], a["source"])
-        rows.append(
-            f'<div class="hx-alert {escape(a["level"])}">'
-            f'<span class="hx-alert-level">{escape(a["level"])}</span>'
-            f'<span class="hx-alert-src">{escape(source)}</span>'
-            f'<span>{escape(a["message"])}</span></div>'
-        )
-    return "".join(rows)
-
 
 def show_html(html, height):
     if hasattr(st, "iframe"):
@@ -250,12 +184,12 @@ def pkg_version(name):
 
 # ------------------------------------------------------------------ header
 st.markdown(
-    '<div class="hx-header"><div>'
-    '<div class="hx-title">Hydraulic System Condition Monitoring</div>'
-    '<div class="hx-subtitle">Valve health estimation and control '
-    f'simulation | dataset cycle {cycle} of {n_cycles - 1}</div></div>'
-    '<div class="hx-mode">DATASET REPLAY | HISTORICAL DATA, NOT LIVE</div>'
-    '</div>',
+    header_html(
+        "Hydraulic System Condition Monitoring",
+        "Valve health estimation and control simulation | "
+        f"dataset cycle {cycle} of {n_cycles - 1}",
+        "DATASET REPLAY | HISTORICAL DATA, NOT LIVE",
+    ),
     unsafe_allow_html=True,
 )
 
@@ -289,15 +223,14 @@ with tab_overview:
         card("Replay cycle", str(cycle), "dataset",
              "May not be stable" if unstable else "Stable operation"),
     ]
-    st.markdown('<div class="hx-grid">' + "".join(cards) + "</div>",
-                unsafe_allow_html=True)
+    st.markdown(card_grid(cards), unsafe_allow_html=True)
 
-    st.subheader("Alerts")
+    section("Alerts")
     st.markdown(alerts_html(state["alerts"]), unsafe_allow_html=True)
 
     left, right = st.columns(2)
     with left:
-        st.subheader("Dataset labels")
+        section("Dataset labels")
         component_rows = [
             {
                 "Component": COMPONENT_TITLES[name],
@@ -313,7 +246,7 @@ with tab_overview:
             "system would not have them."
         )
     with right:
-        st.subheader("Value provenance")
+        section("Value provenance")
         provenance = [
             ("Valve condition", condition_value,
              SOURCE_LABELS["ml_prediction"]),
@@ -340,7 +273,7 @@ with tab_overview:
 with tab_condition:
     left, right = st.columns(2)
     with left:
-        st.subheader("Class probabilities")
+        section("Class probabilities")
         if predicted is None:
             st.warning("No estimate: sensor data invalid (simulated fault).")
         else:
@@ -349,7 +282,7 @@ with tab_condition:
                 meaning = describe_label("valve_condition", int(label))
                 st.progress(p, text=f"{label} % ({meaning}): {p:.1%}")
     with right:
-        st.subheader("Estimate vs dataset label")
+        section("Estimate vs dataset label")
         comparison = pd.DataFrame([
             ("ML estimate", "n/a" if predicted is None else f"{predicted} %"),
             ("Dataset label", f"{labels['valve_condition']} %"),
@@ -364,7 +297,7 @@ with tab_condition:
                 "evidence of accuracy; see Model evaluation."
             )
 
-    st.subheader("History: dataset label and out-of-fold estimate")
+    section("History: dataset label and out-of-fold estimate")
     oof = load_oof_predictions("stable_only")
     if oof is None:
         st.info("Out-of-fold predictions are not available.")
@@ -379,7 +312,7 @@ with tab_condition:
 
 # -------------------------------------------------------------- simulation
 with tab_simulation:
-    st.subheader("Control")
+    section("Control")
     c1, c2, c3 = st.columns(3)
     c1.metric("Mode", pretty_mode(mode))
     c2.metric("Requested opening", f"{requested:.1f} %")
@@ -387,7 +320,7 @@ with tab_simulation:
     st.caption(reason)
 
     frame = trace_frame(trace, desired_flow)
-    st.subheader("Simulated response over one cycle (60 s)")
+    section("Simulated response over one cycle (60 s)")
     st.caption(
         "Simulated values. The run starts with the valve closed and the "
         "plant at its initial pressure. Assumptions are listed under About."
@@ -396,7 +329,7 @@ with tab_simulation:
     st.line_chart(frame[FLOW_COLUMNS])
     st.line_chart(frame[PRESSURE_COLUMNS])
 
-    st.subheader("Observed and simulated values")
+    section("Observed and simulated values")
     observed = state["observed_sensors"]
     comparison = pd.DataFrame([
         ("Pressure, PS1 cycle mean", observed["PS1"]["value"], "bar",
@@ -416,13 +349,13 @@ with tab_simulation:
 
 # ----------------------------------------------------------------- sensors
 with tab_sensors:
-    st.subheader("Observed sensors for this cycle")
+    section("Observed sensors for this cycle")
     st.caption(
         "Dataset measurements. Each value is the mean over the 60 s cycle."
     )
     st.dataframe(sensor_table(state), hide_index=True)
 
-    st.subheader("History")
+    section("History")
     chosen_sensor = st.selectbox("Sensor", list(SENSOR_RATES), key="hist_s")
     half_width = st.slider("Cycles shown either side", 20, 300, 100,
                            key="hist_w")
@@ -435,7 +368,7 @@ with tab_sensors:
 
 # ------------------------------------------------------------------- 3D
 with tab_3d:
-    st.subheader("3D schematic")
+    section("3D schematic")
     st.caption(
         "Generic schematic, not the geometry of the test rig. Only the "
         "simulated opening, flow and pressure move. The actuator is not "
@@ -446,7 +379,7 @@ with tab_3d:
 
 # -------------------------------------------------------- model evaluation
 with tab_evaluation:
-    st.subheader("Cross-validation")
+    section("Cross-validation")
     st.caption(
         "5-fold grouped, stratified cross-validation. Blocks of 50 "
         "consecutive cycles are kept together. These figures, not the "
@@ -488,7 +421,7 @@ with tab_evaluation:
 
     comparison_table = load_report_csv("model_comparison.csv")
     if comparison_table is not None:
-        st.subheader("Model comparison")
+        section("Model comparison")
         st.dataframe(comparison_table.round(3), hide_index=True)
         st.caption(
             "Default settings, same folds. Differences smaller than the "
@@ -497,7 +430,7 @@ with tab_evaluation:
 
     robustness_table = load_report_csv("robustness_by_component.csv")
     if robustness_table is not None:
-        st.subheader("Dependence on other components")
+        section("Dependence on other components")
         findings = robustness_findings(robustness_table)
         if findings:
             st.warning(
@@ -508,14 +441,14 @@ with tab_evaluation:
 
 # ------------------------------------------------------------------- about
 with tab_about:
-    st.subheader("Purpose and scope")
+    section("Purpose and scope")
     st.write(
         "This application replays recorded cycles from the UCI hydraulic "
         "test rig dataset. It estimates the condition of the proportional "
         "valve with a machine-learning model and passes that estimate to a "
         "simulated valve, a simulated plant and a demonstration controller."
     )
-    st.subheader("What each value is")
+    section("What each value is")
     st.dataframe(pd.DataFrame([
         (SOURCE_LABELS["dataset"],
          "Recorded by the test rig (cycle summaries and condition labels)."),
@@ -528,7 +461,7 @@ with tab_about:
         (SOURCE_LABELS["user_setting"], "Set by the person using this page."),
     ], columns=["Label", "Meaning"]), hide_index=True)
 
-    st.subheader("Limitations")
+    section("Limitations")
     st.markdown(
         "- The dataset has no valve command or position. Valve position, "
         "demand and plant pressure here are simulated.\n"
@@ -546,13 +479,13 @@ with tab_about:
         "designed and reviewed by qualified engineers."
     )
 
-    st.subheader("Simulation assumptions")
+    section("Simulation assumptions")
     st.dataframe(pd.DataFrame(
         [(c, p, str(v), u) for c, p, v, u in assumption_rows()],
         columns=["Component", "Parameter", "Value", "Unit"],
     ), hide_index=True)
 
-    st.subheader("Software")
+    section("Software")
     st.dataframe(pd.DataFrame([
         ("Application", APP_VERSION),
         ("Python", sys.version.split()[0]),
@@ -561,7 +494,7 @@ with tab_about:
         ("scikit-learn", pkg_version("scikit-learn")),
     ], columns=["Component", "Version"]), hide_index=True)
 
-    st.subheader("Data source")
+    section("Data source")
     st.write(
         "Helwig, N., Pignanelli, E., Schuetze, A. (2015). Condition "
         "monitoring of hydraulic systems. UCI Machine Learning Repository. "
@@ -571,7 +504,9 @@ with tab_about:
     )
 
 st.markdown(
-    '<div class="hx-footer">Prototype for demonstration and research. Not '
-    f'for operational use. Version {escape(APP_VERSION)}.</div>',
+    footer_html(
+        "Prototype for demonstration and research. Not for operational "
+        f"use. Version {APP_VERSION}."
+    ),
     unsafe_allow_html=True,
 )
