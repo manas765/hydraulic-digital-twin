@@ -7,7 +7,7 @@ hydraulic systems.** A software prototype that estimates the condition of a
 proportional valve from recorded sensor data and passes that estimate to a
 simulated, safety-aware operating policy.
 
-**Live demo:** https://YOUR-APP-NAME.streamlit.app
+
 
 > This application replays historical data. It is not live, and it commands
 > no real equipment.
