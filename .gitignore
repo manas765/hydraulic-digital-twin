@@ -15,3 +15,5 @@ data/raw/
 
 # Generated pages
 reports/twin_3d_*.html
+# Backups made by update scripts
+*.bak

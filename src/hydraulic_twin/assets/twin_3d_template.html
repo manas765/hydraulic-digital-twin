@@ -49,6 +49,11 @@
     border: 1px solid #3b5068; border-radius: 4px; padding: 5px 10px;
     font-size: 12px; cursor: pointer; }
   button:hover { background: #28405a; }
+  @media (max-width: 700px) {
+    #hud { right: 10px; width: auto; max-height: 50%; }
+    #legend { display: none !important; }
+    .panel { font-size: 12px; }
+  }
   #fallback { display: none; position: fixed; top: 50%; left: 50%; z-index: 6;
     transform: translate(-50%, -50%); max-width: 420px; text-align: center;
     background: #3b1f1f; border: 1px solid #8b3a3a; border-radius: 6px;
@@ -607,15 +612,49 @@
     var dragging = false;
     var lastX = 0;
     var lastY = 0;
+    var pointers = {};
+    var pinchStart = 0;
+    var radiusStart = 0;
     var canvas = renderer.domElement;
+    function pointerList() {
+      return Object.keys(pointers).map(function (k) { return pointers[k]; });
+    }
+    function pinchDistance() {
+      var pts = pointerList();
+      return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    }
     canvas.addEventListener("pointerdown", function (e) {
-      dragging = true;
+      pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
       tween = null;
       lastX = e.clientX;
       lastY = e.clientY;
+      dragging = true;
+      if (pointerList().length === 2) {
+        pinchStart = pinchDistance();
+        radiusStart = cam.radius;
+      }
     });
-    window.addEventListener("pointerup", function () { dragging = false; });
+    function releasePointer(e) {
+      delete pointers[e.pointerId];
+      var rest = pointerList();
+      dragging = rest.length === 1;
+      if (dragging) { lastX = rest[0].x; lastY = rest[0].y; }
+    }
+    window.addEventListener("pointerup", releasePointer);
+    window.addEventListener("pointercancel", releasePointer);
     window.addEventListener("pointermove", function (e) {
+      if (pointers[e.pointerId]) {
+        pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+      }
+      if (pointerList().length === 2) {
+        var d = pinchDistance();
+        if (pinchStart > 0 && d > 0) {
+          cam.radius = Math.max(5, Math.min(45,
+            radiusStart * pinchStart / d));
+          updateCamera();
+        }
+        return;
+      }
       if (!dragging) { return; }
       cam.theta -= (e.clientX - lastX) * 0.005;
       cam.phi = Math.max(0.15, Math.min(1.5,

@@ -12,9 +12,10 @@ from .dashboard_data import SOURCE_LABELS
 STYLE = """<style>
 .block-container { padding-top: 4.5rem; }
 .hx-header { display: flex; justify-content: space-between;
-  align-items: center; gap: 1rem; background: #14304d; color: #ffffff;
+  flex-wrap: wrap; align-items: center; gap: .6rem 1rem; background: #14304d; color: #ffffff;
   border-bottom: 3px solid #3b8eea; border-radius: 4px;
   padding: .85rem 1.1rem; margin-bottom: 1.1rem; }
+.hx-header > div:first-child { flex: 1 1 15rem; min-width: 0; }
 .hx-title { font-size: 1.3rem; font-weight: 700; color: #ffffff;
   line-height: 1.25; }
 .hx-subtitle { color: #b8c7d8; font-size: .83rem; margin-top: .2rem; }
@@ -48,7 +49,8 @@ STYLE = """<style>
 .hx-ml { background: #b8620a; }
 .hx-sim { background: #1f6fd1; }
 .hx-user { background: #7a4fd6; }
-.hx-alert { display: flex; gap: .7rem; align-items: baseline;
+.hx-alert { display: flex; flex-wrap: wrap; gap: .1rem .7rem;
+  align-items: baseline;
   padding: .42rem .65rem; margin: .25rem 0; font-size: .87rem;
   color: inherit; background: rgba(128,140,155,.12);
   border-left: 4px solid #8a97a6; border-radius: 0 3px 3px 0; }
@@ -61,8 +63,18 @@ STYLE = """<style>
 .hx-alert-level { font-weight: 700; font-size: .68rem; min-width: 4.3rem;
   letter-spacing: .05em; }
 .hx-alert-src { font-size: .7rem; min-width: 10.5rem; opacity: .7; }
+.hx-alert-msg { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
 .hx-footer { font-size: .74rem; opacity: .6; margin-top: 1.6rem;
   padding-top: .6rem; border-top: 1px solid rgba(128,140,155,.35); }
+@media (max-width: 640px) {
+  .hx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+  .hx-card { padding: .5rem .6rem; }
+  .hx-value { font-size: 1.2rem; }
+  .hx-sub { min-height: 0; font-size: .72rem; }
+  .hx-title { font-size: 1.1rem; }
+  .hx-subtitle { font-size: .78rem; }
+  .hx-alert-src { min-width: 0; }
+}
 </style>"""
 
 BADGES = {
@@ -114,7 +126,7 @@ def alerts_html(alerts) -> str:
             f'<div class="hx-alert {level}">'
             f'<span class="hx-alert-level">{level}</span>'
             f'<span class="hx-alert-src">{escape(source)}</span>'
-            f'<span>{escape(a["message"])}</span></div>'
+            f'<span class="hx-alert-msg">{escape(a["message"])}</span></div>'
         )
     return "".join(rows)
 
