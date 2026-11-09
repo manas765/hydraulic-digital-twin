@@ -1,0 +1,4 @@
+policy,mean_abs_error_lpm,peak_pressure_bar,seconds_above_relief_setting,requested_opening_travel_pct
+"Demand-based, valve 100 (normal)",0.19701034141306287,123.39999999999993,96.60000000000001,115.0
+"Demand-based, valve 80 (restricted)",3.6447595802062374,123.39999999999996,138.20000000000002,0.0
+Fixed 50 % opening (no control),2.839814930608508,120.89999999999996,115.60000000000001,0.0
